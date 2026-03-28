@@ -1,10 +1,11 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { Trash2, Minus, Plus, ShoppingCart, CreditCard, Apple } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, Apple } from 'lucide-react';
+import { CustomerSelect } from './CustomerSelect';
 
 export function Cart() {
-  const { cart, removeFromCart, updateQuantity, clearCart, cartTotal } = usePosStore();
+  const { cart, removeFromCart, updateQuantity, clearCart, cartTotal, setCheckoutOpen } = usePosStore();
 
   const formattedTotal = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -42,9 +43,14 @@ export function Cart() {
         </button>
       </div>
 
+      {/* Customer Selection */}
+      <div className="px-6 pt-4 pb-2 z-10 relative">
+        <CustomerSelect />
+      </div>
+
       {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto px-6 py-2 pb-24">
-        <div className="space-y-4 pt-4">
+        <div className="space-y-4 pt-2">
           {cart.map((item) => (
             <div 
               key={item.cart_id} 
@@ -117,12 +123,16 @@ export function Cart() {
         
         <div className="space-y-3">
           {/* Main Checkout Button */}
-          <button className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
+          <button 
+            onClick={() => setCheckoutOpen(true)}
+            className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
             Review Order
           </button>
           
           {/* Apple Pay / Secondary */}
-          <button className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
+          <button 
+            onClick={() => setCheckoutOpen(true)}
+            className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
             <Apple className="w-5 h-5 mr-1.5 mb-0.5" fill="currentColor" /> Pay
           </button>
         </div>

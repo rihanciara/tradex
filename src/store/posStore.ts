@@ -14,10 +14,18 @@ interface PosState {
   updateQuantity: (cartId: string, qty: number) => void;
   clearCart: () => void;
   cartTotal: () => number;
+  customerId: number | null;
+  setCustomerId: (id: number | null) => void;
+  isCheckoutOpen: boolean;
+  setCheckoutOpen: (isOpen: boolean) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
   cart: [],
+  customerId: null,
+  isCheckoutOpen: false,
+  setCustomerId: (id) => set({ customerId: id }),
+  setCheckoutOpen: (isOpen) => set({ isCheckoutOpen: isOpen }),
   
   addToCart: (product) => {
     set((state) => {

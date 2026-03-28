@@ -38,3 +38,52 @@ export const fetchCatalog = async (locationId?: number): Promise<CatalogResponse
   });
   return response.data;
 };
+
+export interface Customer {
+  id: number;
+  name: string;
+  mobile: string | null;
+  contact_id: string;
+  email: string | null;
+  balance: number;
+}
+
+export interface CustomerResponse {
+  success: boolean;
+  data: Customer[];
+}
+
+export const fetchCustomers = async (search?: string): Promise<CustomerResponse> => {
+  const response = await apiClient.get<CustomerResponse>('/pos/customers', {
+    params: { search },
+  });
+  return response.data;
+};
+
+export interface CheckoutPayload {
+  customer_id: number;
+  location_id?: number;
+  items: {
+    product_id: number;
+    variation_id: number;
+    quantity: number;
+    unit_price: number;
+  }[];
+  payment: {
+    method: 'cash' | 'card' | 'custom';
+    amount: number;
+  }[];
+  final_total: number;
+}
+
+export interface CheckoutResponse {
+  success: boolean;
+  message: string;
+  transaction_id?: number;
+  invoice_no?: string;
+}
+
+export const submitCheckout = async (payload: CheckoutPayload): Promise<CheckoutResponse> => {
+  const response = await apiClient.post<CheckoutResponse>('/pos/checkout', payload);
+  return response.data;
+};

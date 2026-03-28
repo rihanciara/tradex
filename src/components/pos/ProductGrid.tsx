@@ -86,7 +86,7 @@ export function ProductGrid() {
         {filteredProducts.length === 0 ? (
           <div className="text-center py-24">
             <Search className="w-12 h-12 text-[#86868b] mx-auto mb-4 opacity-30" />
-            <p className="text-[#1d1d1f] text-[17px] font-semibold">No results for "{searchTerm}"</p>
+            <p className="text-[#1d1d1f] text-[17px] font-semibold">No results for &quot;{searchTerm}&quot;</p>
             <p className="text-[#86868b] text-[15px] mt-1">Check the spelling or try a new search.</p>
           </div>
         ) : (
