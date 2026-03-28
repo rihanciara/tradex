@@ -23,56 +23,59 @@ export function ProductCard({ product }: ProductCardProps) {
     <div 
       onClick={() => addToCart(product)}
       className={`
-        relative overflow-hidden rounded-xl border p-4 cursor-pointer 
-        transition-all duration-200 ease-in-out hover:shadow-lg
-        flex flex-col h-full bg-white group
-        ${inCart ? 'border-blue-500 ring-1 ring-blue-500/50 bg-blue-50/30' : 'border-gray-200 hover:border-blue-300'}
+        relative overflow-hidden p-5 cursor-pointer flex flex-col h-full bg-white group
+        rounded-[18px] border apple-btn
+        ${inCart 
+          ? 'border-[#0071e3] ring-1 ring-[#0071e3] bg-[#f5f5f7]' 
+          : 'border-black/5 hover:border-black/10 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] shadow-sm'
+        }
       `}
     >
-      {/* Stock Badge */}
-      <div className="absolute top-3 right-3">
+      {/* Sleek Minimal Stock Badge */}
+      <div className="absolute top-4 right-4">
         <span className={`
-          inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
-          ${product.current_stock > 10 ? 'bg-green-100 text-green-700' : 
-            product.current_stock > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}
+          inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase
+          ${product.current_stock > 10 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50' : 
+            product.current_stock > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200/50' : 'bg-rose-50 text-rose-700 border border-rose-200/50'}
         `}>
-          {product.current_stock > 0 ? `${product.current_stock} in stock` : 'Out of stock'}
+          {product.current_stock > 0 ? `${product.current_stock} Left` : 'Out'}
         </span>
       </div>
 
-      <div className="mt-4 flex-grow">
-        <h3 className="text-sm font-bold text-gray-900 line-clamp-2 leading-tight">
+      <div className="mt-2 flex-grow">
+        <h3 className="text-[17px] font-semibold text-[#1d1d1f] line-clamp-2 leading-tight tracking-tight pr-12">
           {product.product_name}
         </h3>
         
         {/* Variation Name (if not 'DUMMY') */}
         {product.variation_name !== 'DUMMY' && product.variation_name !== product.product_name && (
-          <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+          <p className="text-[13px] text-[#86868b] mt-1 line-clamp-1 font-medium">
             {product.variation_name}
           </p>
         )}
         
         {/* SKU */}
-        <p className="text-xs text-gray-400 mt-1 font-mono">
+        <p className="text-[11px] text-[#86868b] mt-1.5 font-mono opacity-60">
           {product.variation_sku || product.product_sku}
         </p>
       </div>
 
-      <div className="mt-4 flex items-end justify-between border-t pt-3">
-        <div>
-          <span className="text-lg font-black text-gray-900 tracking-tight">
+      <div className="mt-5 flex items-end justify-between border-t border-black/5 pt-4">
+        <div className="flex items-baseline">
+          <span className="text-[20px] font-bold text-[#1d1d1f] tracking-tight">
             {formattedPrice}
           </span>
-          <span className="text-[10px] text-gray-500 ml-1">inc. tax</span>
         </div>
         
         <button 
           className={`
-            w-8 h-8 flex items-center justify-center rounded-lg transition-colors
-            ${inCart ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-600'}
+            w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-300
+            ${inCart 
+              ? 'bg-[#0071e3] text-white shadow-sm' 
+              : 'bg-[#f5f5f7] text-[#1d1d1f] group-hover:bg-[#0071e3] group-hover:text-white group-hover:shadow-md'}
           `}
         >
-          {inCart ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {inCart ? <Check className="w-4 h-4 stroke-[2.5]" /> : <Plus className="w-4 h-4 stroke-[2.5]" />}
         </button>
       </div>
     </div>
