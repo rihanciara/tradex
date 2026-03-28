@@ -1,0 +1,26 @@
+"use client";
+
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
+import { ProductGrid } from '@/components/pos/ProductGrid';
+import { Cart } from '@/components/pos/Cart';
+
+export default function PosPage() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <main className="flex h-screen bg-white overflow-hidden text-gray-800">
+        
+        {/* Left Side: Product Grid & Search */}
+        <section className="flex-1 h-full w-2/3 shadow-2xl z-10">
+          <ProductGrid />
+        </section>
+
+        {/* Right Side: The Cashier Cart */}
+        <section className="w-1/3 min-w-[350px] max-w-[450px] h-full shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 relative">
+          <Cart />
+        </section>
+
+      </main>
+    </QueryClientProvider>
+  );
+}
