@@ -10,16 +10,33 @@ export const apiClient = axios.create({
     'Accept': 'application/json',
   },
   // Ensure we send cookies for Sanctum authentication
+  // Make sure CORS supports_credentials is true in Laravel
   withCredentials: true,
+});
+
+// Request interceptor to add token if it exists (Passport fallback)
+apiClient.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
 });
 
 // Response interceptor to handle unauthenticated sessions globally
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // If dev bypass is active, ignore 401s (just for UI testing without backend auth)
+    const isDevBypass = typeof window !== 'undefined' ? localStorage.getItem('dev_bypass') === 'true' : false;
+    
+    if ((error.response?.status === 401 || error.response?.status === 403) && !isDevBypass) {
       // Redirect to login if token expires or Vercel mode is off
-      window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
