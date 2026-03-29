@@ -229,6 +229,44 @@ class ApiPosController extends Controller
         ]);
     }
 
+    public function getTaxonomies(Request $request)
+    {
+        if (!$this->checkVercelApiMode()) {
+            return response()->json(['success' => false, 'msg' => 'Vercel API Mode is disabled.'], 403);
+        }
+
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'msg' => 'Unauthenticated.'], 401);
+        }
+        $business_id = $user->business_id;
+
+        // Fetch Categories
+        $categories = DB::table('categories')
+            ->where('business_id', $business_id)
+            ->where('category_type', 'product')
+            ->whereNull('deleted_at')
+            ->select('id', 'name', 'parent_id')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        // Fetch Brands
+        $brands = DB::table('brands')
+            ->where('business_id', $business_id)
+            ->whereNull('deleted_at')
+            ->select('id', 'name')
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'categories' => $categories,
+                'brands' => $brands
+            ]
+        ]);
+    }
+
     /**
      * VERCEL NEXT.JS API: Process raw checkout payload.
      * Inserts Transaction, Sell Lines, and Payments bypassing heavy ORM.

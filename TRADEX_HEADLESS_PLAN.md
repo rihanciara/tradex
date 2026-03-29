@@ -26,7 +26,7 @@ The Next.js POS needs essential data to render the UI before any transaction occ
 - [x] **2.2 Product Catalog Endpoint (`/api/jerryupdates/v1/pos/products`):**
   - Fetch products, variations, prices, and stock levels.
   - Implement pagination and search functionality.
-- [ ] **2.3 Categories & Brands:**
+- [x] **2.3 Categories & Brands:**
   - Endpoints to fetch taxonomy data for the left-hand navigation/filtering sidebar.
 - [x] **2.4 Customer Directory (`/api/jerryupdates/v1/pos/customers`):**
   - Fetch list of customers for selection during a sale.
@@ -37,7 +37,7 @@ The Next.js POS needs essential data to render the UI before any transaction occ
 ## Phase 3: Transaction Engine (Write API)
 The core logic for processing sales, holding carts, and managing register state.
 
-- [ ] **3.1 Cash Register Operations:**
+- [x] **3.1 Cash Register Operations:** (Skipped/Deferred)
   - `POST /register/open`: Open a new shift with starting cash.
   - `POST /register/close`: Close the shift and submit closing totals.
 - [x] **3.2 Checkout/Sell Endpoint (`POST /api/jerryupdates/v1/pos/checkout`):**
@@ -82,7 +82,6 @@ The actual implementation of the user interface on the new stack.
 ---
 
 ## Current Status (As of Last Session)
-- **Phase 1 Complete:** We have fully implemented token-based authentication (Phase 1.4/1.5) by creating the `ApiAuthController`. The Next.js frontend now correctly acquires a Passport access token via `/api/jerryupdates/v1/auth/login` and persists it in cookies. All POS endpoints are securely gated via `auth:api` middleware.
-- **Phase 2.1 Complete:** Successfully implemented the `/init` endpoint in `ApiPosController` which returns the global business settings, currency details, active payment methods, and cash register status. 
-- **Frontend Integration:** Updated the Next.js frontend to fetch this initialization data on boot via a new `PosInitializer` component and store it in Zustand (`usePosStore`). The POS UI now dynamically formats currency based on the backend's settings.
-- **Next Action:** We can proceed with Categories & Brands data fetching (Phase 2.3) or Cash Register Operations (Phase 3.1).
+- **Phase 2 Complete:** We have finished the Core Data Synchronization phase by implementing the Taxonomies endpoint (Phase 2.3). The POS UI now includes a left-hand sidebar in the Product Grid that fetches and allows filtering by Categories and Brands.
+- **Skipped Phase 3.1:** As per user request, Cash Register Operations have been skipped/deferred.
+- **Next Action:** We can move on to Suspending/Holding Sales (Phase 3.3) or Offline Resilience mechanisms (Phase 4).

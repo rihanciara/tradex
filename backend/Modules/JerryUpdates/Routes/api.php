@@ -28,6 +28,9 @@ Route::prefix('jerryupdates/v1/pos')->middleware(['api', 'auth:api'])->group(fun
     // Initial Load / Settings Payload
     Route::get('init', [ApiPosController::class, 'init']);
 
+    // Taxonomies
+    Route::get('taxonomies', [ApiPosController::class, 'getTaxonomies']);
+
     // Hyper-optimized Product Catalog
     Route::get('catalog', [ApiPosController::class, 'getCatalog']);
 

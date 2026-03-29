@@ -67,6 +67,28 @@ export const fetchCatalog = async (locationId?: number): Promise<CatalogResponse
   return response.data;
 };
 
+export interface Taxonomy {
+  id: number;
+  name: string;
+}
+
+export interface Category extends Taxonomy {
+  parent_id: number | null;
+}
+
+export interface TaxonomiesResponse {
+  success: boolean;
+  data: {
+    categories: Category[];
+    brands: Taxonomy[];
+  };
+}
+
+export const fetchTaxonomies = async (): Promise<TaxonomiesResponse> => {
+  const response = await apiClient.get<TaxonomiesResponse>('/pos/taxonomies');
+  return response.data;
+};
+
 export interface Customer {
   id: number;
   name: string;
