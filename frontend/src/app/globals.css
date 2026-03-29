@@ -71,3 +71,26 @@ body {
   transform: scale(0.96); /* iOS 'squish' effect */
   opacity: 0.8;
 }
+
+/* Print specific styles for receipt */
+@media print {
+  @page {
+    margin: 0;
+    size: auto; /* Uses printer default (e.g. 80mm roll) */
+  }
+
+  body {
+    visibility: hidden;
+    background: white;
+  }
+
+  #receipt-print-area {
+    visibility: visible;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+}

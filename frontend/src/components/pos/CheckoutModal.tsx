@@ -5,6 +5,8 @@ import { usePosStore } from '@/store/posStore';
 import { submitCheckout, CheckoutPayload } from '@/lib/api';
 import { X, CreditCard, Banknote, CheckCircle, Loader2 } from 'lucide-react';
 
+import { ReceiptPrinter } from './ReceiptPrinter';
+
 export function CheckoutModal() {
   const { 
     cart, 
@@ -25,7 +27,22 @@ export function CheckoutModal() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [amountTendered, setAmountTendered] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  
+  // Success state holds the receipt data
+  const [successData, setSuccessData] = useState<{
+    invoiceNo: string;
+    isOffline: boolean;
+    date: string;
+    cart: any[];
+    subtotal: number;
+    discount: number;
+    tax: number;
+    total: number;
+    tendered: number;
+    change: number;
+    paymentMethod: string;
+  } | null>(null);
+  
   const [error, setError] = useState<string | null>(null);
 
   if (!isCheckoutOpen) return null;
@@ -89,14 +106,32 @@ export function CheckoutModal() {
     try {
       const response = await submitCheckout(payload);
       if (response.success) {
-        setIsSuccess(true);
+        setSuccessData({
+          invoiceNo: response.invoice_no || 'UNKNOWN',
+          isOffline: response.is_offline || false,
+          date: new Date().toISOString(),
+          cart: [...cart],
+          subtotal: subtotal,
+          discount: discountVal,
+          tax: taxVal,
+          total: total,
+          tendered: paymentMethod === 'cash' ? tendered : total,
+          change: change,
+          paymentMethod: paymentMethod === 'cash' ? 'Cash' : 'Card'
+        });
+        
+        // Auto-print
+        setTimeout(() => {
+          window.print();
+        }, 500);
+
         setTimeout(() => {
           clearCart();
           setCheckoutOpen(false);
-          setIsSuccess(false);
+          setSuccessData(null);
           setAmountTendered('');
           setPaymentMethod('cash');
-        }, 3000);
+        }, 5000);
       } else {
         setError(response.message || 'Checkout failed');
       }
@@ -114,22 +149,31 @@ export function CheckoutModal() {
     }
   };
 
-  if (isSuccess) {
+  if (successData) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all">
-        <div className="bg-white/90 backdrop-blur-xl rounded-[28px] shadow-2xl p-10 flex flex-col items-center w-full max-w-sm apple-glass animate-in zoom-in-95 duration-200">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all print:bg-white print:backdrop-blur-none">
+        <div className="bg-white/90 backdrop-blur-xl rounded-[28px] shadow-2xl p-10 flex flex-col items-center w-full max-w-sm apple-glass animate-in zoom-in-95 duration-200 print:hidden">
           <div className="w-20 h-20 bg-[#34c759]/10 rounded-full flex items-center justify-center mb-6">
             <CheckCircle className="w-10 h-10 text-[#34c759]" />
           </div>
           <h2 className="text-[28px] font-bold text-[#1d1d1f] tracking-tight mb-2">Payment Successful</h2>
-          <p className="text-[17px] text-[#86868b] font-medium text-center">Receipt is being printed...</p>
+          <p className="text-[17px] text-[#86868b] font-medium text-center mb-6">Receipt is being printed...</p>
+          <button 
+            onClick={() => window.print()}
+            className="text-[#0071e3] font-medium text-[15px] hover:underline"
+          >
+            Print Again
+          </button>
         </div>
+        
+        {/* Hidden receipt that only shows up in print mode via CSS */}
+        <ReceiptPrinter {...successData} />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all p-4 print:hidden">
       <div className="bg-white/95 backdrop-blur-3xl rounded-[28px] shadow-2xl overflow-hidden w-full max-w-4xl flex border border-white/40 apple-glass animate-in zoom-in-95 duration-200">
         
         {/* Left Side: Order Summary */}
