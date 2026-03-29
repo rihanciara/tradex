@@ -1,4 +1,5 @@
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
 // The Laravel Backend API Base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://fwcv3.test/api/jerryupdates/v1';
@@ -17,7 +18,7 @@ export const apiClient = axios.create({
 // Request interceptor to add token if it exists (Passport fallback)
 apiClient.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('auth_token');
+    const token = Cookies.get('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -29,12 +30,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If dev bypass is active, ignore 401s (just for UI testing without backend auth)
-    const isDevBypass = typeof window !== 'undefined' ? localStorage.getItem('dev_bypass') === 'true' : false;
-    
-    if ((error.response?.status === 401 || error.response?.status === 403) && !isDevBypass) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
       // Redirect to login if token expires or Vercel mode is off
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        Cookies.remove('auth_token');
         window.location.href = '/login';
       }
     }

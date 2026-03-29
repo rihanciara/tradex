@@ -11,8 +11,8 @@ The foundation of a headless architecture is secure, stateless communication bet
 - [x] **1.1 Configure CORS:** Ensure the Laravel backend accepts requests from the Vercel frontend domains.
 - [x] **1.2 Disable CSRF for API:** Bypass Laravel's CSRF protection for `api/*` routes, as the headless app will use token-based authentication (Sanctum/Passport).
 - [x] **1.3 Cross-Domain Login Endpoint:** Leveraged standard `/login` route with CORS/CSRF bypass for session/cookie-based auth, or token creation if utilizing Sanctum. (Note: Currently `ApiPosController` has a fallback user mechanism for testing).
-- [ ] **1.4 Token Validation & Refresh:** Ensure tokens/sessions can be validated on boot and refreshed if close to expiry.
-- [ ] **1.5 User Profile Endpoint:** Create an endpoint to fetch the authenticated user's details, permissions, and assigned locations.
+- [x] **1.4 Token Validation & Refresh:** Ensure tokens/sessions can be validated on boot and refreshed if close to expiry.
+- [x] **1.5 User Profile Endpoint:** Create an endpoint to fetch the authenticated user's details, permissions, and assigned locations.
 
 ---
 
@@ -82,6 +82,7 @@ The actual implementation of the user interface on the new stack.
 ---
 
 ## Current Status (As of Last Session)
+- **Phase 1 Complete:** We have fully implemented token-based authentication (Phase 1.4/1.5) by creating the `ApiAuthController`. The Next.js frontend now correctly acquires a Passport access token via `/api/jerryupdates/v1/auth/login` and persists it in cookies. All POS endpoints are securely gated via `auth:api` middleware.
 - **Phase 2.1 Complete:** Successfully implemented the `/init` endpoint in `ApiPosController` which returns the global business settings, currency details, active payment methods, and cash register status. 
 - **Frontend Integration:** Updated the Next.js frontend to fetch this initialization data on boot via a new `PosInitializer` component and store it in Zustand (`usePosStore`). The POS UI now dynamically formats currency based on the backend's settings.
-- **Next Action:** We can move on to strictly issuing API Tokens (Phase 1.4/1.5) or proceed with Categories & Brands data fetching (Phase 2.3) or Cash Register Operations (Phase 3.1).
+- **Next Action:** We can proceed with Categories & Brands data fetching (Phase 2.3) or Cash Register Operations (Phase 3.1).

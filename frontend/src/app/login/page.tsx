@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
+import Cookies from "js-cookie";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,64 +19,24 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Step 1: Initialize CSRF protection (Sanctum/Laravel standard)
-      // Since this might not be Sanctum but Passport or standard web guard,
-      // we'll try a common approach. If it's pure passport, we'd use /oauth/token.
-      // Let's assume standard Laravel auth via /login for stateful session 
-      // or a custom endpoint in JerryUpdates.
-      
-      // Let's first ensure we have CSRF token (for cookie based auth)
-      try {
-        await apiClient.get("/sanctum/csrf-cookie", { baseURL: process.env.NEXT_PUBLIC_API_URL?.replace('/api/jerryupdates/v1', '') || 'http://fwcv3.test' });
-      } catch (e) {
-        // Might fail if not using sanctum, ignore
-        console.log("CSRF cookie request failed, continuing anyway...", e);
-      }
-
-      // Try hitting the standard Laravel login endpoint first
-      const baseURL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/jerryupdates/v1', '') || 'http://fwcv3.test';
-      
-      const response = await apiClient.post(`${baseURL}/login`, {
-        username: email, // UltimatePOS uses username by default, but fallback to email
+      const response = await apiClient.post("/auth/login", {
+        username: email,
         password: password,
-      }, {
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        }
       });
 
-      if (response.status === 200 || response.status === 204) {
-        // Success
+      if (response.data?.success && response.data?.data?.access_token) {
+        const token = response.data.data.access_token;
+        
+        // Store the token in a cookie so middleware or apiClient can access it
+        Cookies.set('auth_token', token, { expires: 7, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+        
         router.push("/pos");
         return;
+      } else {
+        setError("Invalid response from server.");
       }
     } catch (err: any) {
       console.error("Login error:", err);
-      
-      // Try OAuth token if standard login fails (Passport fallback)
-      try {
-        const baseURL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/jerryupdates/v1', '') || 'http://fwcv3.test';
-        // In Ultimate POS, they often use a specific OAuth endpoint or custom auth
-        const oauthResponse = await apiClient.post(`${baseURL}/oauth/token`, {
-          grant_type: 'password',
-          client_id: 2, // Default password client ID
-          client_secret: 'YOUR_CLIENT_SECRET_HERE', // This would need to be in env
-          username: email,
-          password: password,
-        });
-        
-        if (oauthResponse.data && oauthResponse.data.access_token) {
-          // Store token and set header
-          localStorage.setItem('auth_token', oauthResponse.data.access_token);
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${oauthResponse.data.access_token}`;
-          router.push("/pos");
-          return;
-        }
-      } catch (oauthErr) {
-        console.error("OAuth fallback failed:", oauthErr);
-      }
-      
       setError(
         err.response?.data?.message || err.response?.data?.msg || "Failed to log in. Check your credentials."
       );

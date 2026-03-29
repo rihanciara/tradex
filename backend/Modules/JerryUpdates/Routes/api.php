@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\JerryUpdates\Http\Controllers\Api\ApiPosController;
+use Modules\JerryUpdates\Http\Controllers\Api\ApiAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,10 +15,16 @@ use Modules\JerryUpdates\Http\Controllers\Api\ApiPosController;
 |
 */
 
-// TODO: Replace 'auth:api' with Sanctum or a custom API Token guard for Next.js.
-// For now, we wrap it in an API group. You can hit this locally via Postman with proper headers.
-Route::prefix('jerryupdates/v1/pos')->middleware(['api'])->group(function () {
+Route::prefix('jerryupdates/v1/auth')->middleware(['api'])->group(function () {
+    Route::post('login', [ApiAuthController::class, 'login']);
+});
+
+// We wrap POS endpoints in an API group. You can hit this locally via Postman with proper headers.
+Route::prefix('jerryupdates/v1/pos')->middleware(['api', 'auth:api'])->group(function () {
     
+    Route::get('profile', [ApiAuthController::class, 'profile']);
+    Route::post('logout', [ApiAuthController::class, 'logout']);
+
     // Initial Load / Settings Payload
     Route::get('init', [ApiPosController::class, 'init']);
 

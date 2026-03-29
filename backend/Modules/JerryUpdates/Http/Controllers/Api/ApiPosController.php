@@ -35,10 +35,7 @@ class ApiPosController extends Controller
 
         $user = auth()->user();
         if (!$user) {
-            $user = \App\User::where('business_id', '!=', null)->first();
-            if (!$user) {
-                return response()->json(['success' => false, 'msg' => 'Unauthenticated and no fallback user found.'], 401);
-            }
+            return response()->json(['success' => false, 'msg' => 'Unauthenticated.'], 401);
         }
         $business_id = $user->business_id;
 
@@ -124,10 +121,7 @@ class ApiPosController extends Controller
         // 1. Authentication & Tenant Scope
         $user = auth()->user();
         if (!$user) {
-            $user = \App\User::where('business_id', '!=', null)->first();
-            if (!$user) {
-                return response()->json(['success' => false, 'msg' => 'Unauthenticated and no fallback user found.'], 401);
-            }
+            return response()->json(['success' => false, 'msg' => 'Unauthenticated.'], 401);
         }
         $business_id = $user->business_id;
         $location_id = $request->get('location_id');
@@ -207,10 +201,7 @@ class ApiPosController extends Controller
 
         $user = auth()->user();
         if (!$user) {
-            $user = \App\User::where('business_id', '!=', null)->first();
-            if (!$user) {
-                return response()->json(['success' => false, 'msg' => 'Unauthenticated and no fallback user found.'], 401);
-            }
+            return response()->json(['success' => false, 'msg' => 'Unauthenticated.'], 401);
         }
         $business_id = $user->business_id;
         $search = $request->get('search');
@@ -250,10 +241,7 @@ class ApiPosController extends Controller
 
         $user = auth()->user();
         if (!$user) {
-            $user = \App\User::where('business_id', '!=', null)->first();
-            if (!$user) {
-                return response()->json(['success' => false, 'msg' => 'Unauthenticated and no fallback user found.'], 401);
-            }
+            return response()->json(['success' => false, 'msg' => 'Unauthenticated.'], 401);
         }
         $business_id = $user->business_id;
         
