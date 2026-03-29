@@ -4,18 +4,35 @@ import { Product, PosInitData } from '@/lib/api';
 interface CartItem extends Product {
   cart_id: string; // Unique ID for the cart (in case of combo splits)
   quantity: number;
-  final_price: number;
+  final_price: number; // Includes item-level taxes
 }
 
 interface PosState {
   initData: PosInitData | null;
   setInitData: (data: PosInitData) => void;
   cart: CartItem[];
+  
+  // Cart Actions
   addToCart: (product: Product) => void;
   removeFromCart: (cartId: string) => void;
   updateQuantity: (cartId: string, qty: number) => void;
   clearCart: () => void;
-  cartTotal: () => number;
+  
+  // Cart Level Discount & Tax
+  cartDiscountType: 'fixed' | 'percentage' | null;
+  cartDiscountAmount: number;
+  setCartDiscount: (type: 'fixed' | 'percentage' | null, amount: number) => void;
+  
+  cartTaxId: number | null;
+  setCartTaxId: (id: number | null) => void;
+
+  // Calculators
+  cartSubtotal: () => number; // Sum of items inc. item-level taxes
+  cartDiscountValue: () => number; // Calculated currency value of discount
+  cartTaxValue: () => number; // Calculated currency value of cart-level tax
+  cartTotal: () => number; // Final total after cart discounts and cart taxes
+  
+  // UI & Customer State
   customerId: number | null;
   setCustomerId: (id: number | null) => void;
   isCheckoutOpen: boolean;
@@ -26,9 +43,17 @@ export const usePosStore = create<PosState>((set, get) => ({
   initData: null,
   setInitData: (data) => set({ initData: data }),
   cart: [],
+  
+  cartDiscountType: null,
+  cartDiscountAmount: 0,
+  setCartDiscount: (type, amount) => set({ cartDiscountType: type, cartDiscountAmount: amount }),
+  
+  cartTaxId: null,
+  setCartTaxId: (id) => set({ cartTaxId: id }),
+
   customerId: null,
-  isCheckoutOpen: false,
   setCustomerId: (id) => set({ customerId: id }),
+  isCheckoutOpen: false,
   setCheckoutOpen: (isOpen) => set({ isCheckoutOpen: isOpen }),
   
   addToCart: (product) => {
@@ -75,10 +100,53 @@ export const usePosStore = create<PosState>((set, get) => ({
     }));
   },
 
-  clearCart: () => set({ cart: [] }),
+  clearCart: () => set({ 
+    cart: [], 
+    cartDiscountType: null, 
+    cartDiscountAmount: 0, 
+    cartTaxId: null,
+    customerId: null 
+  }),
 
-  cartTotal: () => {
+  cartSubtotal: () => {
     const { cart } = get();
     return cart.reduce((total, item) => total + item.final_price * item.quantity, 0);
+  },
+
+  cartDiscountValue: () => {
+    const { cartSubtotal, cartDiscountType, cartDiscountAmount } = get();
+    const subtotal = cartSubtotal();
+    
+    if (!cartDiscountType || cartDiscountAmount <= 0) return 0;
+    
+    if (cartDiscountType === 'fixed') {
+      return cartDiscountAmount;
+    }
+    
+    if (cartDiscountType === 'percentage') {
+      return subtotal * (cartDiscountAmount / 100);
+    }
+    
+    return 0;
+  },
+
+  cartTaxValue: () => {
+    const { cartSubtotal, cartDiscountValue, cartTaxId, initData } = get();
+    if (!cartTaxId || !initData?.tax_rates) return 0;
+    
+    const tax = initData.tax_rates.find(t => t.id === cartTaxId);
+    if (!tax) return 0;
+
+    const subtotalAfterDiscount = cartSubtotal() - cartDiscountValue();
+    return subtotalAfterDiscount * (tax.amount / 100);
+  },
+
+  cartTotal: () => {
+    const { cartSubtotal, cartDiscountValue, cartTaxValue } = get();
+    const subtotal = cartSubtotal();
+    const discount = cartDiscountValue();
+    const tax = cartTaxValue();
+    
+    return Math.max(0, subtotal - discount + tax);
   },
 }));

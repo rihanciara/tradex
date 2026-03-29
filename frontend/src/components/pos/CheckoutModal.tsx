@@ -6,7 +6,22 @@ import { submitCheckout, CheckoutPayload } from '@/lib/api';
 import { X, CreditCard, Banknote, CheckCircle, Loader2 } from 'lucide-react';
 
 export function CheckoutModal() {
-  const { cart, cartTotal, customerId, isCheckoutOpen, setCheckoutOpen, clearCart } = usePosStore();
+  const { 
+    cart, 
+    cartTotal, 
+    cartSubtotal,
+    cartDiscountValue,
+    cartTaxValue,
+    cartTaxId,
+    cartDiscountType,
+    cartDiscountAmount,
+    customerId, 
+    isCheckoutOpen, 
+    setCheckoutOpen, 
+    clearCart, 
+    initData 
+  } = usePosStore();
+
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [amountTendered, setAmountTendered] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -16,19 +31,27 @@ export function CheckoutModal() {
   if (!isCheckoutOpen) return null;
 
   const total = cartTotal();
+  const subtotal = cartSubtotal();
+  const discountVal = cartDiscountValue();
+  const taxVal = cartTaxValue();
+
   const tendered = parseFloat(amountTendered) || 0;
   const change = paymentMethod === 'cash' ? Math.max(0, tendered - total) : 0;
   const isReadyToPay = paymentMethod === 'card' || (paymentMethod === 'cash' && tendered >= total);
 
-  const formattedTotal = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(total);
+  const currencyCode = initData?.business?.currency_code || 'USD';
+  const currencySymbol = initData?.business?.currency_symbol || '$';
 
-  const formattedChange = new Intl.NumberFormat('en-US', {
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
-  }).format(change);
+    currency: currencyCode,
+  }).format(val);
+
+  const formattedTotal = formatCurrency(total);
+  const formattedSubtotal = formatCurrency(subtotal);
+  const formattedDiscount = formatCurrency(discountVal);
+  const formattedTax = formatCurrency(taxVal);
+  const formattedChange = formatCurrency(change);
 
   const handleCheckout = async () => {
     if (!isReadyToPay || cart.length === 0) return;
@@ -55,8 +78,11 @@ export function CheckoutModal() {
           amount: total,
         }
       ],
-      total_before_tax: total, // Simplified for now without cart discounts
-      tax_amount: 0, // Simplified
+      total_before_tax: subtotal,
+      tax_amount: taxVal,
+      tax_rate_id: cartTaxId,
+      discount_type: cartDiscountType,
+      discount_amount: cartDiscountAmount,
       final_total: total,
     };
 
@@ -129,13 +155,21 @@ export function CheckoutModal() {
           <div className="p-8 pt-4 border-t border-black/5 bg-white/40">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[15px] text-[#86868b] font-medium">Subtotal</span>
-              <span className="text-[15px] font-semibold text-[#1d1d1f]">{formattedTotal}</span>
+              <span className="text-[15px] font-semibold text-[#1d1d1f]">{formattedSubtotal}</span>
             </div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[15px] text-[#86868b] font-medium">Tax</span>
-              <span className="text-[15px] font-semibold text-[#1d1d1f]">{new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(0)}</span>
-            </div>
-            <div className="flex justify-between items-center bg-[#f5f5f7] p-4 rounded-xl">
+            {discountVal > 0 && (
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[15px] text-[#0071e3] font-medium">Discount</span>
+                <span className="text-[15px] font-semibold text-[#0071e3]">-{formattedDiscount}</span>
+              </div>
+            )}
+            {taxVal > 0 && (
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-[15px] text-[#86868b] font-medium">Cart Tax</span>
+                <span className="text-[15px] font-semibold text-[#1d1d1f]">{formattedTax}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center bg-[#f5f5f7] p-4 rounded-xl mt-4">
               <span className="text-[17px] text-[#1d1d1f] font-semibold">Total</span>
               <span className="text-[24px] font-bold text-[#1d1d1f]">{formattedTotal}</span>
             </div>

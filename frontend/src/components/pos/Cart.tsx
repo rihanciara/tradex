@@ -1,16 +1,48 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { Minus, Plus, ShoppingCart, Apple } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, Apple, Tag, Receipt } from 'lucide-react';
 import { CustomerSelect } from './CustomerSelect';
+import { useState } from 'react';
 
 export function Cart() {
-  const { cart, removeFromCart, updateQuantity, clearCart, cartTotal, setCheckoutOpen, initData } = usePosStore();
+  const { 
+    cart, 
+    removeFromCart, 
+    updateQuantity, 
+    clearCart, 
+    cartTotal,
+    cartSubtotal,
+    cartDiscountValue,
+    cartTaxValue,
+    setCartDiscount,
+    setCartTaxId,
+    cartDiscountAmount,
+    cartDiscountType,
+    cartTaxId,
+    setCheckoutOpen, 
+    initData 
+  } = usePosStore();
 
-  const formattedTotal = new Intl.NumberFormat('en-US', {
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [tempDiscountType, setTempDiscountType] = useState<'fixed' | 'percentage'>('percentage');
+  const [tempDiscountAmount, setTempDiscountAmount] = useState<string>('');
+
+  const currencyCode = initData?.business?.currency_code || 'USD';
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: initData?.business?.currency_code || 'USD',
-  }).format(cartTotal());
+    currency: currencyCode,
+  }).format(val);
+
+  const applyDiscount = () => {
+    const val = parseFloat(tempDiscountAmount);
+    if (!isNaN(val) && val > 0) {
+      setCartDiscount(tempDiscountType, val);
+    } else {
+      setCartDiscount(null, 0);
+    }
+    setShowDiscountModal(false);
+  };
 
   if (cart.length === 0) {
     return (
@@ -116,30 +148,131 @@ export function Cart() {
       </div>
 
       {/* Floating Apple Pay / Checkout Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-2xl border-t border-black/5 z-30 pb-8">
-        <div className="flex justify-between items-baseline mb-5 px-1">
-          <span className="text-[17px] text-[#1d1d1f] font-medium">Total</span>
-          <span className="text-[28px] font-bold text-[#1d1d1f] tracking-tight">
-            {formattedTotal}
-          </span>
-        </div>
+      <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-2xl border-t border-black/5 z-30 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         
-        <div className="space-y-3">
-          {/* Main Checkout Button */}
+        {/* Actions Bar (Discount / Tax) */}
+        <div className="flex border-b border-black/5">
           <button 
-            onClick={() => setCheckoutOpen(true)}
-            className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
-            Review Order
+            onClick={() => {
+              setTempDiscountType(cartDiscountType || 'percentage');
+              setTempDiscountAmount(cartDiscountAmount ? cartDiscountAmount.toString() : '');
+              setShowDiscountModal(true);
+            }}
+            className="flex-1 py-3 flex items-center justify-center gap-2 text-[14px] font-medium text-[#0071e3] hover:bg-[#0071e3]/5 transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+            {cartDiscountValue() > 0 ? `Discount (-${formatCurrency(cartDiscountValue())})` : 'Add Discount'}
           </button>
           
-          {/* Apple Pay / Secondary */}
-          <button 
-            onClick={() => setCheckoutOpen(true)}
-            className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
-            <Apple className="w-5 h-5 mr-1.5 mb-0.5" fill="currentColor" /> Pay
-          </button>
+          <div className="w-px bg-black/5"></div>
+          
+          <div className="flex-1 relative group">
+            <select
+              value={cartTaxId || ''}
+              onChange={(e) => setCartTaxId(e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full h-full appearance-none bg-transparent cursor-pointer text-center text-[14px] font-medium text-[#1d1d1f] hover:bg-black/5 transition-colors outline-none focus:ring-0"
+              style={{ textAlignLast: 'center' }}
+            >
+              <option value="">No Cart Tax</option>
+              {initData?.tax_rates?.map(tax => (
+                <option key={tax.id} value={tax.id}>{tax.name} ({tax.amount}%)</option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <Receipt className="w-4 h-4 text-[#86868b]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Totals & Buttons */}
+        <div className="p-6 pb-8">
+          <div className="flex justify-between items-baseline mb-5 px-1">
+            <span className="text-[17px] text-[#1d1d1f] font-medium">Total</span>
+            <span className="text-[28px] font-bold text-[#1d1d1f] tracking-tight">
+              {formatCurrency(cartTotal())}
+            </span>
+          </div>
+          
+          <div className="space-y-3">
+            {/* Main Checkout Button */}
+            <button 
+              onClick={() => setCheckoutOpen(true)}
+              className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
+              Review Order
+            </button>
+            
+            {/* Apple Pay / Secondary */}
+            <button 
+              onClick={() => setCheckoutOpen(true)}
+              className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
+              <Apple className="w-5 h-5 mr-1.5 mb-0.5" fill="currentColor" /> Pay
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Discount Modal Overlay */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-black/5 flex justify-between items-center">
+              <h3 className="font-semibold text-[#1d1d1f] text-[17px]">Apply Discount</h3>
+            </div>
+            
+            <div className="p-6">
+              <div className="flex bg-[#f5f5f7] rounded-xl p-1 mb-6">
+                <button 
+                  onClick={() => setTempDiscountType('percentage')}
+                  className={`flex-1 py-2 text-[14px] font-medium rounded-lg transition-colors ${tempDiscountType === 'percentage' ? 'bg-white shadow-sm text-[#1d1d1f]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
+                >
+                  Percentage (%)
+                </button>
+                <button 
+                  onClick={() => setTempDiscountType('fixed')}
+                  className={`flex-1 py-2 text-[14px] font-medium rounded-lg transition-colors ${tempDiscountType === 'fixed' ? 'bg-white shadow-sm text-[#1d1d1f]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
+                >
+                  Fixed Amount
+                </button>
+              </div>
+
+              <div className="relative">
+                {tempDiscountType === 'fixed' && (
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[17px] font-medium text-[#86868b]">{initData?.business?.currency_symbol || '$'}</span>
+                )}
+                <input 
+                  type="number"
+                  value={tempDiscountAmount}
+                  onChange={(e) => setTempDiscountAmount(e.target.value)}
+                  placeholder="0"
+                  className={`w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3]/30 focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 rounded-xl py-3 text-[17px] font-medium text-[#1d1d1f] transition-all outline-none ${tempDiscountType === 'fixed' ? 'pl-8' : 'pl-4'}`}
+                  autoFocus
+                />
+                {tempDiscountType === 'percentage' && (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[17px] font-medium text-[#86868b]">%</span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#fbfbfd] border-t border-black/5 flex gap-3">
+              <button 
+                onClick={() => {
+                  setCartDiscount(null, 0);
+                  setShowDiscountModal(false);
+                }}
+                className="flex-1 py-3 bg-white border border-black/10 hover:bg-[#f5f5f7] rounded-xl text-[#ff3b30] font-medium text-[15px] transition-colors"
+              >
+                Remove
+              </button>
+              <button 
+                onClick={applyDiscount}
+                className="flex-1 py-3 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-xl font-medium text-[15px] transition-colors shadow-sm"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
