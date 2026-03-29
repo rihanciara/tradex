@@ -285,7 +285,7 @@ class ApiPosController extends Controller
         
         $location_id = $request->get('location_id');
         if (!$location_id) {
-            $location = BusinessLocation::where('business_id', $business_id)->first();
+            $location = DB::table('business_locations')->where('business_id', $business_id)->first();
             $location_id = $location ? $location->id : null;
         }
 
@@ -301,10 +301,19 @@ class ApiPosController extends Controller
                 ->where('business_id', $business_id)
                 ->where('type', 'sell')
                 ->count() + 1;
+            
+            // Allow custom invoice scheme handling if needed, defaulting to simple format
             $invoice_no = 'INV-' . str_pad($ref_count, 4, '0', STR_PAD_LEFT);
 
-            $now = Carbon::now()->toDateTimeString();
-            $final_total = $request->get('final_total', 0);
+            $now = \Carbon\Carbon::now()->toDateTimeString();
+            $final_total = (float)$request->get('final_total', 0);
+            $total_before_tax = (float)$request->get('total_before_tax', $final_total);
+            
+            // Discounts & Taxes at cart level
+            $discount_type = $request->get('discount_type', null);
+            $discount_amount = (float)$request->get('discount_amount', 0);
+            $tax_id = $request->get('tax_rate_id', null);
+            $tax_amount = (float)$request->get('tax_amount', 0);
 
             // Determine payment status
             $total_paid = 0;
@@ -330,7 +339,11 @@ class ApiPosController extends Controller
                 'contact_id' => $request->get('customer_id'),
                 'invoice_no' => $invoice_no,
                 'transaction_date' => $now,
-                'total_before_tax' => $final_total, // Simplification for raw API
+                'total_before_tax' => $total_before_tax,
+                'tax_id' => $tax_id,
+                'tax_amount' => $tax_amount,
+                'discount_type' => $discount_type,
+                'discount_amount' => $discount_amount,
                 'final_total' => $final_total,
                 'created_by' => $user->id,
                 'created_at' => $now,
@@ -339,22 +352,38 @@ class ApiPosController extends Controller
 
             $transaction_id = DB::table('transactions')->insertGetId($transaction_data);
 
-            // 3. Insert Sell Lines
+            // 3. Insert Sell Lines & Deduct Stock
             $sell_lines = [];
             $items = $request->get('items', []);
+            
             foreach ($items as $item) {
+                $qty = (float)$item['quantity'];
+                
                 $sell_lines[] = [
                     'transaction_id' => $transaction_id,
                     'product_id' => $item['product_id'],
                     'variation_id' => $item['variation_id'],
-                    'quantity' => $item['quantity'],
+                    'quantity' => $qty,
+                    'unit_price_before_discount' => $item['unit_price'],
                     'unit_price' => $item['unit_price'],
-                    'unit_price_inc_tax' => $item['unit_price'],
-                    'item_tax' => 0,
-                    'tax_id' => null,
+                    'unit_price_inc_tax' => $item['unit_price_inc_tax'] ?? $item['unit_price'],
+                    'item_tax' => $item['item_tax'] ?? 0,
+                    'tax_id' => $item['tax_id'] ?? null,
+                    'line_discount_type' => $item['line_discount_type'] ?? null,
+                    'line_discount_amount' => $item['line_discount_amount'] ?? 0,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
+
+                // Simplified Stock Deduction (Bypass heavy model events for speed)
+                // Only if stock is tracked (assuming enable_stock is passed or we verify)
+                if (!empty($item['enable_stock']) && $item['enable_stock'] == 1) {
+                    DB::table('variation_location_details')
+                        ->where('variation_id', $item['variation_id'])
+                        ->where('product_id', $item['product_id'])
+                        ->where('location_id', $location_id)
+                        ->decrement('qty_available', $qty);
+                }
             }
             if (!empty($sell_lines)) {
                 DB::table('transaction_sell_lines')->insert($sell_lines);
@@ -382,14 +411,11 @@ class ApiPosController extends Controller
                 DB::table('transaction_payments')->insert($payments_data);
             }
 
-            // TODO: Ideally trigger events for stock update and accounting hooks
-            // But this bypass achieves the raw speed requested for the API proof of concept.
-
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Sale added successfully',
+                'message' => 'Sale processed successfully',
                 'transaction_id' => $transaction_id,
                 'invoice_no' => $invoice_no
             ]);

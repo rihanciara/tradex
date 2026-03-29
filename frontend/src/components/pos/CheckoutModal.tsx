@@ -38,11 +38,16 @@ export function CheckoutModal() {
 
     const payload: CheckoutPayload = {
       customer_id: customerId || 1, // 1 is Walk-in typical ID
+      location_id: initData?.location_id || undefined,
       items: cart.map(item => ({
         product_id: item.product_id,
         variation_id: item.variation_id,
         quantity: item.quantity,
-        unit_price: item.final_price,
+        unit_price: item.sell_price_exc_tax,
+        unit_price_inc_tax: item.sell_price_inc_tax,
+        item_tax: item.sell_price_inc_tax - item.sell_price_exc_tax,
+        tax_id: item.tax_id,
+        enable_stock: item.enable_stock,
       })),
       payment: [
         {
@@ -50,6 +55,8 @@ export function CheckoutModal() {
           amount: total,
         }
       ],
+      total_before_tax: total, // Simplified for now without cart discounts
+      tax_amount: 0, // Simplified
       final_total: total,
     };
 
