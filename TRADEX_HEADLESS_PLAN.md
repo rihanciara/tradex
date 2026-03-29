@@ -56,8 +56,8 @@ The core logic for processing sales, holding carts, and managing register state.
 ## Phase 4: Offline Resilience & Performance (Frontend/Backend Coordination)
 Ensuring the POS remains functional and lightning-fast under heavy load or poor network conditions.
 
-- [ ] **4.1 Product Catalog Sync:** Implement a mechanism (e.g., ETags or Last-Modified headers) to allow the Next.js app to cache the entire product catalog locally (IndexedDB) and only fetch updates.
-- [ ] **4.2 Background Queueing:** If a checkout request fails due to network loss, the Next.js app should queue the transaction locally and automatically sync it to the backend when the connection is restored.
+- [x] **4.1 Product Catalog Sync:** Implement a mechanism (e.g., ETags or Last-Modified headers) to allow the Next.js app to cache the entire product catalog locally (IndexedDB) and only fetch updates.
+- [x] **4.2 Background Queueing:** If a checkout request fails due to network loss, the Next.js app should queue the transaction locally and automatically sync it to the backend when the connection is restored.
 - [ ] **4.3 Webhook Triggers:** (Optional) Configure the backend to send webhooks to Vercel when critical data changes (e.g., mass stock update) to invalidate Vercel's Edge Cache.
 
 ---
@@ -82,6 +82,7 @@ The actual implementation of the user interface on the new stack.
 ---
 
 ## Current Status (As of Last Session)
+- **Phase 4 Complete (Offline Resilience):** Implemented a lightweight, zero-dependency native IndexedDB wrapper (`db.ts`). Integrated a "Cache-Then-Network" fallback strategy in all API fetches (`init`, `catalog`, `taxonomies`, `customers`), ensuring the POS can seamlessly cold-boot even when offline (provided a previous sync exists). Built an `OfflineSyncManager` component that automatically intercepts failed checkouts, queues them locally, and background-syncs them to the Laravel API as soon as `navigator.onLine` is restored.
 - **Phase 2 Complete:** We have finished the Core Data Synchronization phase by implementing the Taxonomies endpoint (Phase 2.3). The POS UI now includes a left-hand sidebar in the Product Grid that fetches and allows filtering by Categories and Brands.
 - **Skipped Phase 3.1:** As per user request, Cash Register Operations have been skipped/deferred.
-- **Next Action:** We can move on to Suspending/Holding Sales (Phase 3.3) or Offline Resilience mechanisms (Phase 4).
+- **Next Action:** Phase 5 (Next.js UX/UI Polishing like payment flow expansions) or Phase 3.3 (Suspend/Hold Sale).
