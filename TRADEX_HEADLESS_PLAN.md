@@ -19,7 +19,7 @@ The foundation of a headless architecture is secure, stateless communication bet
 ## Phase 2: Core Data Synchronization (Read-Only API)
 The Next.js POS needs essential data to render the UI before any transaction occurs.
 
-- [ ] **2.1 Initialization Payload (`/api/jerryupdates/v1/pos/init`):** 
+- [x] **2.1 Initialization Payload (`/api/jerryupdates/v1/pos/init`):** 
   - Fetch global business settings (currency, tax rates, rounding rules).
   - Fetch active payment methods.
   - Fetch cash register status (open/closed).
@@ -82,7 +82,6 @@ The actual implementation of the user interface on the new stack.
 ---
 
 ## Current Status (As of Last Session)
-- **Monorepo Migration:** We have combined the frontend (Next.js) and backend (Laravel/fwcv3) into a single unified `tradex` repository with `/frontend` and `/backend` directories.
-- **Focus:** We have successfully configured foundational security (CORS, CSRF bypass) to allow the standard `/login` route to accept cross-domain requests. We created the initial scaffold for the `checkout`, `catalog` (products), and `customers` endpoints in `ApiPosController` within the `JerryUpdates` module.
-- **Note on Auth:** Currently, `ApiPosController` has a hardcoded fallback (`\App\User::where('business_id', '!=', null)->first()`) to allow rapid frontend testing without strict token exchange.
-- **Next Action:** We need to define the `init` endpoint (Phase 2.1) to feed the frontend its required configuration on boot, OR improve the Authentication architecture to formally issue API Tokens (e.g., via Sanctum) rather than relying on the fallback user.
+- **Phase 2.1 Complete:** Successfully implemented the `/init` endpoint in `ApiPosController` which returns the global business settings, currency details, active payment methods, and cash register status. 
+- **Frontend Integration:** Updated the Next.js frontend to fetch this initialization data on boot via a new `PosInitializer` component and store it in Zustand (`usePosStore`). The POS UI now dynamically formats currency based on the backend's settings.
+- **Next Action:** We can move on to strictly issuing API Tokens (Phase 1.4/1.5) or proceed with Categories & Brands data fetching (Phase 2.3) or Cash Register Operations (Phase 3.1).

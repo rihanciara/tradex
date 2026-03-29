@@ -5,10 +5,12 @@ import { queryClient } from '@/lib/queryClient';
 import { ProductGrid } from '@/components/pos/ProductGrid';
 import { Cart } from '@/components/pos/Cart';
 import { CheckoutModal } from '@/components/pos/CheckoutModal';
+import { PosInitializer } from '@/components/pos/PosInitializer';
 
 export default function PosPage() {
   return (
     <QueryClientProvider client={queryClient}>
+      <PosInitializer />
       <main className="flex h-screen bg-white overflow-hidden text-gray-800">
         
         {/* Left Side: Product Grid & Search */}

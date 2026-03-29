@@ -24,6 +24,94 @@ class ApiPosController extends Controller
     }
 
     /**
+     * VERCEL NEXT.JS API: Initial load payload for POS.
+     * Provides business settings, register status, and taxes.
+     */
+    public function init(Request $request)
+    {
+        if (!$this->checkVercelApiMode()) {
+            return response()->json(['success' => false, 'msg' => 'Vercel API Mode is disabled.'], 403);
+        }
+
+        $user = auth()->user();
+        if (!$user) {
+            $user = \App\User::where('business_id', '!=', null)->first();
+            if (!$user) {
+                return response()->json(['success' => false, 'msg' => 'Unauthenticated and no fallback user found.'], 401);
+            }
+        }
+        $business_id = $user->business_id;
+
+        $location_id = $request->get('location_id');
+        if (!$location_id) {
+            $location = BusinessLocation::where('business_id', $business_id)->first();
+            $location_id = $location ? $location->id : null;
+        }
+
+        // 1. Business & Currency Settings
+        $business = DB::table('business as b')
+            ->leftJoin('currencies as c', 'b.currency_id', '=', 'c.id')
+            ->where('b.id', $business_id)
+            ->select(
+                'b.name',
+                'b.pos_settings',
+                'c.code as currency_code',
+                'c.symbol as currency_symbol',
+                'c.thousand_separator',
+                'c.decimal_separator'
+            )
+            ->first();
+
+        $pos_settings = $business && $business->pos_settings ? json_decode($business->pos_settings, true) : [];
+
+        // 2. Active Tax Rates
+        $tax_rates = DB::table('tax_rates')
+            ->where('business_id', $business_id)
+            ->whereNull('deleted_at')
+            ->select('id', 'name', 'amount')
+            ->get();
+
+        // 3. Cash Register Status
+        $open_register = DB::table('cash_registers')
+            ->where('business_id', $business_id)
+            ->where('user_id', $user->id)
+            ->where('status', 'open')
+            ->first();
+
+        // 4. Payment Methods
+        $payment_methods = [
+            ['id' => 'cash', 'label' => 'Cash'],
+            ['id' => 'card', 'label' => 'Card'],
+            ['id' => 'custom', 'label' => 'Custom'],
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'business' => [
+                    'name' => $business ? $business->name : '',
+                    'currency_code' => $business ? $business->currency_code : 'USD',
+                    'currency_symbol' => $business ? $business->currency_symbol : '$',
+                    'thousand_separator' => $business ? $business->thousand_separator : ',',
+                    'decimal_separator' => $business ? $business->decimal_separator : '.',
+                ],
+                'pos_settings' => $pos_settings,
+                'location_id' => $location_id,
+                'tax_rates' => $tax_rates,
+                'payment_methods' => $payment_methods,
+                'register' => [
+                    'is_open' => $open_register ? true : false,
+                    'register_id' => $open_register ? $open_register->id : null,
+                ],
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->first_name . ' ' . $user->last_name,
+                ]
+            ]
+        ]);
+    }
+
+    /**
      * VERCEL NEXT.JS API: Fetch ultra-fast, flattened product catalog for IndexedDB.
      * Bypasses slow ProductUtil ORM models for raw DB performance.
      */

@@ -1,5 +1,33 @@
 import { apiClient } from '@/lib/apiClient';
 
+export interface PosInitData {
+  business: {
+    name: string;
+    currency_code: string;
+    currency_symbol: string;
+    thousand_separator: string;
+    decimal_separator: string;
+  };
+  pos_settings: any;
+  location_id: number | null;
+  tax_rates: { id: number; name: string; amount: number }[];
+  payment_methods: { id: string; label: string }[];
+  register: { is_open: boolean; register_id: number | null };
+  user: { id: number; name: string };
+}
+
+export interface InitResponse {
+  success: boolean;
+  data: PosInitData;
+}
+
+export const fetchInit = async (locationId?: number): Promise<InitResponse> => {
+  const response = await apiClient.get<InitResponse>('/pos/init', {
+    params: { location_id: locationId },
+  });
+  return response.data;
+};
+
 export interface Product {
   product_id: number;
   variation_id: number;

@@ -9,6 +9,7 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const addToCart = usePosStore((state) => state.addToCart);
   const cartItems = usePosStore((state) => state.cart);
+  const initData = usePosStore((state) => state.initData);
   
   // Check if product is already in cart for visual feedback
   const inCart = cartItems.some(item => item.variation_id === product.variation_id);
@@ -16,7 +17,7 @@ export function ProductCard({ product }: ProductCardProps) {
   // Format price
   const formattedPrice = new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: initData?.business?.currency_code || 'USD',
   }).format(product.sell_price_inc_tax);
 
   return (

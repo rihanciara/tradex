@@ -5,11 +5,11 @@ import { Minus, Plus, ShoppingCart, Apple } from 'lucide-react';
 import { CustomerSelect } from './CustomerSelect';
 
 export function Cart() {
-  const { cart, removeFromCart, updateQuantity, clearCart, cartTotal, setCheckoutOpen } = usePosStore();
+  const { cart, removeFromCart, updateQuantity, clearCart, cartTotal, setCheckoutOpen, initData } = usePosStore();
 
   const formattedTotal = new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: initData?.business?.currency_code || 'USD',
   }).format(cartTotal());
 
   if (cart.length === 0) {
@@ -71,7 +71,10 @@ export function Cart() {
                 
                 <div className="text-right whitespace-nowrap pl-2">
                   <span className="text-[17px] font-semibold text-[#1d1d1f] block tracking-tight">
-                    ${(item.final_price * item.quantity).toFixed(2)}
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: initData?.business?.currency_code || 'USD',
+                    }).format(item.final_price * item.quantity)}
                   </span>
                 </div>
               </div>

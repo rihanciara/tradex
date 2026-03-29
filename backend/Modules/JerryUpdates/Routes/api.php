@@ -18,6 +18,9 @@ use Modules\JerryUpdates\Http\Controllers\Api\ApiPosController;
 // For now, we wrap it in an API group. You can hit this locally via Postman with proper headers.
 Route::prefix('jerryupdates/v1/pos')->middleware(['api'])->group(function () {
     
+    // Initial Load / Settings Payload
+    Route::get('init', [ApiPosController::class, 'init']);
+
     // Hyper-optimized Product Catalog
     Route::get('catalog', [ApiPosController::class, 'getCatalog']);
 

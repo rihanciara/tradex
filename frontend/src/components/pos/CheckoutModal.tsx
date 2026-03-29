@@ -111,9 +111,9 @@ export function CheckoutModal() {
                 <div key={item.cart_id} className="flex justify-between items-start py-2 border-b border-black/5 last:border-0">
                   <div className="pr-4">
                     <span className="font-semibold text-[#1d1d1f] text-[15px] block">{item.product_name}</span>
-                    <span className="text-[13px] text-[#86868b] font-medium">{item.quantity} x ${(item.final_price).toFixed(2)}</span>
+                    <span className="text-[13px] text-[#86868b] font-medium">{item.quantity} x {new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(item.final_price)}</span>
                   </div>
-                  <span className="font-semibold text-[#1d1d1f] text-[15px]">${(item.final_price * item.quantity).toFixed(2)}</span>
+                  <span className="font-semibold text-[#1d1d1f] text-[15px]">{new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(item.final_price * item.quantity)}</span>
                 </div>
               ))}
             </div>
@@ -126,7 +126,7 @@ export function CheckoutModal() {
             </div>
             <div className="flex justify-between items-center mb-4">
               <span className="text-[15px] text-[#86868b] font-medium">Tax</span>
-              <span className="text-[15px] font-semibold text-[#1d1d1f]">$0.00</span>
+              <span className="text-[15px] font-semibold text-[#1d1d1f]">{new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(0)}</span>
             </div>
             <div className="flex justify-between items-center bg-[#f5f5f7] p-4 rounded-xl">
               <span className="text-[17px] text-[#1d1d1f] font-semibold">Total</span>
@@ -178,7 +178,7 @@ export function CheckoutModal() {
               <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <label className="block text-[13px] font-medium text-[#86868b] mb-2 px-1">Amount Tendered</label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[20px] font-bold text-[#1d1d1f]">$</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[20px] font-bold text-[#1d1d1f]">{currencySymbol}</span>
                   <input 
                     type="number"
                     value={amountTendered}

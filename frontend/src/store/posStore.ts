@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Product } from '@/lib/api';
+import { Product, PosInitData } from '@/lib/api';
 
 interface CartItem extends Product {
   cart_id: string; // Unique ID for the cart (in case of combo splits)
@@ -8,6 +8,8 @@ interface CartItem extends Product {
 }
 
 interface PosState {
+  initData: PosInitData | null;
+  setInitData: (data: PosInitData) => void;
   cart: CartItem[];
   addToCart: (product: Product) => void;
   removeFromCart: (cartId: string) => void;
@@ -21,6 +23,8 @@ interface PosState {
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
+  initData: null,
+  setInitData: (data) => set({ initData: data }),
   cart: [],
   customerId: null,
   isCheckoutOpen: false,
