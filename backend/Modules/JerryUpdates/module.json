@@ -1,0 +1,11 @@
+{
+    "name": "JerryUpdates",
+    "alias": "jerryupdates",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\JerryUpdates\\Providers\\JerryUpdatesServiceProvider"
+    ],
+    "files": []
+}

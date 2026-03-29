@@ -1,0 +1,823 @@
+---
+title: "Adding Discount Columns to Products Sales Report"
+sidebar_label: "Adding Discount Columns to Products Sales Report"
+slug: /adding-discount-columns-to-products-sales-report-adding-discount-columns-to-products-sales-report-ultimate-pos-tutorials-02_08_2025-20-43-57
+hide_title: true
+toc: false
+---
+
+# Adding Discount Columns to Products Sales Report
+
+This guide demonstrates how to add comprehensive discount columns to the Product Sales Report, providing detailed visibility into different types of discounts applied to transactions.
+
+## Overview​
+
+We'll be adding three new discount columns to the existing Product Sales Report:
+
+  * **Line Discount** : Total line-level discounts for the transaction
+  * **Invoice Discount** : Transaction-level discounts
+  * **Total Discount** : Combined line and invoice discounts
+
+
+
+![Discount Columns](/img/docs/discount-columns-1.png)
+
+The final column order will be: 
+```text
+Existing Discount
+```
+ → 
+```text
+Line Discount
+```
+ → 
+```text
+Invoice Discount
+```
+ → 
+```text
+Total Discount
+```
+ → 
+```text
+Total Amount
+```
+
+
+## Complete Implementation Tree​
+
+
+```text
+Product Sales Report Enhancement/
+├── Backend (PHP)
+│   └── getproductSellReport() method
+│       ├── Query modifications
+│       ├── New column calculations
+│       └── DataTables response updates
+├── Frontend (Blade Template)
+│   ├── Table headers update
+│   └── Footer calculations update
+└── JavaScript
+    ├── DataTables configuration
+    └── Column mappings update
+```
+
+
+## Implementation Steps​
+
+### Step 1: Update PHP Controller Method​
+
+Update the 
+```text
+getproductSellReport
+```
+ method in your controller app/Http/Controllers/ReportController.php:
+
+
+```php
+public function getproductSellReport(Request $request)
+{
+    if (! auth()->user()->can('purchase_n_sell_report.view')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    $business_id = $request->session()->get('user.business_id');
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+
+    $product_custom_field1 = !empty($custom_labels['product']['custom_field_1']) ? $custom_labels['product']['custom_field_1'] : '';
+    $product_custom_field2 = !empty($custom_labels['product']['custom_field_2']) ? $custom_labels['product']['custom_field_2'] : '';
+
+    if ($request->ajax()) {
+        $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
+
+        $variation_id = $request->get('variation_id', null);
+        $query = TransactionSellLine::join(
+            'transactions as t',
+            'transaction_sell_lines.transaction_id',
+            '=',
+            't.id'
+        )
+            ->join(
+                'variations as v',
+                'transaction_sell_lines.variation_id',
+                '=',
+                'v.id'
+            )
+            ->join('product_variations as pv', 'v.product_variation_id', '=', 'pv.id')
+            ->join('contacts as c', 't.contact_id', '=', 'c.id')
+            ->join('products as p', 'pv.product_id', '=', 'p.id')
+            ->leftjoin('tax_rates', 'transaction_sell_lines.tax_id', '=', 'tax_rates.id')
+            ->leftjoin('units as u', 'p.unit_id', '=', 'u.id')
+            ->where('t.business_id', $business_id)
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->with('transaction.payment_lines')
+            ->whereNull('parent_sell_line_id')
+            ->select(
+                'p.name as product_name',
+                'p.type as product_type',
+                'p.product_custom_field1 as product_custom_field1',
+                'p.product_custom_field2 as product_custom_field2',
+                'pv.name as product_variation',
+                'v.name as variation_name',
+                'v.sub_sku',
+                'c.name as customer',
+                'c.mobile as contact_no',
+                'c.supplier_business_name',
+                'c.contact_id',
+                't.id as transaction_id',
+                't.invoice_no',
+                't.transaction_date as transaction_date',
+                't.discount_amount as transaction_discount_amount',
+                't.discount_type as transaction_discount_type',
+                't.total_before_tax',
+                'transaction_sell_lines.unit_price_before_discount as unit_price',
+                'transaction_sell_lines.unit_price_inc_tax as unit_sale_price',
+                DB::raw('(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as sell_qty'),
+                'transaction_sell_lines.line_discount_type as discount_type',
+                'transaction_sell_lines.line_discount_amount as discount_amount',
+                'transaction_sell_lines.item_tax',
+                'tax_rates.name as tax',
+                'u.short_name as unit',
+                'transaction_sell_lines.parent_sell_line_id',
+                DB::raw('((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal')
+            )
+            ->groupBy('transaction_sell_lines.id');
+
+        // Apply filters (existing code)
+        if (! empty($variation_id)) {
+            $query->where('transaction_sell_lines.variation_id', $variation_id);
+        }
+
+        $start_date = $request->get('start_date');
+        $end_date = $request->get('end_date');
+        if (! empty($start_date) && ! empty($end_date)) {
+            $query->where('t.transaction_date', '>=', $start_date)
+                ->where('t.transaction_date', '<=', $end_date);
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('t.location_id', $permitted_locations);
+        }
+
+        $location_id = $request->get('location_id', null);
+        if (! empty($location_id)) {
+            $query->where('t.location_id', $location_id);
+        }
+
+        $customer_id = $request->get('customer_id', null);
+        if (! empty($customer_id)) {
+            $query->where('t.contact_id', $customer_id);
+        }
+
+        $customer_group_id = $request->get('customer_group_id', null);
+        if (! empty($customer_group_id)) {
+            $query->leftjoin('customer_groups AS CG', 'c.customer_group_id', '=', 'CG.id')
+                ->where('CG.id', $customer_group_id);
+        }
+
+        $category_id = $request->get('category_id', null);
+        if (! empty($category_id)) {
+            $query->where('p.category_id', $category_id);
+        }
+
+        $brand_id = $request->get('brand_id', null);
+        if (! empty($brand_id)) {
+            $query->where('p.brand_id', $brand_id);
+        }
+
+        return Datatables::of($query)
+            ->editColumn('product_name', function ($row) {
+                $product_name = $row->product_name;
+                if ($row->product_type == 'variable') {
+                    $product_name .= ' - ' . $row->product_variation . ' - ' . $row->variation_name;
+                }
+                return $product_name;
+            })
+            ->editColumn('invoice_no', function ($row) {
+                return '<a data-href="' . action([\App\Http\Controllers\SellController::class, 'show'], [$row->transaction_id])
+                    . '" href="#" data-container=".view_modal" class="btn-modal">' . $row->invoice_no . '</a>';
+            })
+            ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+            ->editColumn('unit_sale_price', function ($row) {
+                return '<span class="unit_sale_price" data-orig-value="' . $row->unit_sale_price . '">' .
+                    $this->transactionUtil->num_f($row->unit_sale_price, true) . '</span>';
+            })
+            ->editColumn('sell_qty', function ($row) {
+                $class = is_null($row->parent_sell_line_id) ? 'sell_qty' : '';
+                return '<span class="' . $class . '"  data-orig-value="' . $row->sell_qty . '"
+                data-unit="' . $row->unit . '" >' .
+                    $this->transactionUtil->num_f($row->sell_qty, false, null, true) . '</span> ' . $row->unit;
+            })
+            ->editColumn('subtotal', function ($row) {
+                $class = is_null($row->parent_sell_line_id) ? 'row_subtotal' : '';
+                return '<span class="' . $class . '"  data-orig-value="' . $row->subtotal . '">' .
+                    $this->transactionUtil->num_f($row->subtotal, true) . '</span>';
+            })
+            ->editColumn('unit_price', function ($row) {
+                return '<span class="unit_price" data-orig-value="' . $row->unit_price . '">' .
+                    $this->transactionUtil->num_f($row->unit_price, true) . '</span>';
+            })
+            ->editColumn('discount_amount', '
+                @if($discount_type == "percentage")
+                    {{@num_format($discount_amount)}} %
+                @elseif($discount_type == "fixed")
+                    {{@num_format($discount_amount)}}
+                @endif
+                ')
+            // NEW: Line Discount Column (total line discounts for this transaction)
+            ->addColumn('line_discount', function ($row) {
+                $line_discount_result = DB::table('transaction_sell_lines')
+                    ->where('transaction_id', $row->transaction_id)
+                    ->select([
+                        DB::raw('SUM(CASE
+                WHEN line_discount_type = "percentage" THEN
+                    (unit_price_before_discount * quantity * line_discount_amount / 100)
+                ELSE (line_discount_amount * quantity)
+            END) as total_line_discount')
+                    ])
+                    ->first();
+
+                $line_discount = $line_discount_result->total_line_discount ?? 0;
+
+                return '<span class="display_currency line_discount" data-orig-value="' . $line_discount . '" data-currency_symbol="true">' .
+                    number_format($line_discount, 2) . '</span>';
+            })
+            // NEW: Invoice Discount Column
+            ->addColumn('invoice_discount', function ($row) {
+                $invoice_discount = 0;
+                if ($row->transaction_discount_amount > 0) {
+                    if ($row->transaction_discount_type == 'percentage') {
+                        $invoice_discount = ($row->total_before_tax * $row->transaction_discount_amount) / 100;
+                    } else {
+                        $invoice_discount = $row->transaction_discount_amount;
+                    }
+                }
+
+                return '<span class="display_currency invoice_discount" data-orig-value="' . $invoice_discount . '" data-currency_symbol="true">' .
+                    number_format($invoice_discount, 2) . '</span>';
+            })
+            // NEW: Total Discount Column (line + invoice)
+            ->addColumn('total_discount', function ($row) {
+                // Calculate line discount
+                $line_discount_result = DB::table('transaction_sell_lines')
+                    ->where('transaction_id', $row->transaction_id)
+                    ->select([
+                        DB::raw('SUM(CASE
+                WHEN line_discount_type = "percentage" THEN
+                    (unit_price_before_discount * quantity * line_discount_amount / 100)
+                ELSE (line_discount_amount * quantity)
+            END) as total_line_discount')
+                    ])
+                    ->first();
+
+                $line_discount = $line_discount_result->total_line_discount ?? 0;
+
+                // Calculate invoice discount
+                $invoice_discount = 0;
+                if ($row->transaction_discount_amount > 0) {
+                    if ($row->transaction_discount_type == 'percentage') {
+                        $invoice_discount = ($row->total_before_tax * $row->transaction_discount_amount) / 100;
+                    } else {
+                        $invoice_discount = $row->transaction_discount_amount;
+                    }
+                }
+
+                $total_discount = $line_discount + $invoice_discount;
+
+                return '<span class="display_currency total_discount" data-orig-value="' . $total_discount . '" data-currency_symbol="true">' .
+                    number_format($total_discount, 2) . '</span>';
+            })
+            ->editColumn('tax', function ($row) {
+                return $this->transactionUtil->num_f($row->item_tax, true)
+                    . '<br>' . '<span data-orig-value="' . $row->item_tax . '"
+                 class="tax" data-unit="' . $row->tax . '"><small>(' . $row->tax . ')</small></span>';
+            })
+            ->addColumn('payment_methods', function ($row) use ($payment_types) {
+                $methods = array_unique($row->transaction->payment_lines->pluck('method')->toArray());
+                $count = count($methods);
+                $payment_method = '';
+                if ($count == 1) {
+                    $payment_method = $payment_types[$methods[0]] ?? '';
+                } elseif ($count > 1) {
+                    $payment_method = __('lang_v1.checkout_multi_pay');
+                }
+
+                $html = ! empty($payment_method) ? '<span class="payment-method" data-orig-value="' . $payment_method . '" data-status-name="' . $payment_method . '">' . $payment_method . '</span>' : '';
+                return $html;
+            })
+            ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
+            ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount', 'unit_price', 'line_discount', 'invoice_discount', 'total_discount', 'tax', 'customer', 'payment_methods'])
+            ->make(true);
+    }
+
+    $business_locations = BusinessLocation::forDropdown($business_id);
+    $customers = Contact::customersDropdown($business_id);
+    $categories = Category::forDropdown($business_id, 'product');
+    $brands = Brands::forDropdown($business_id);
+    $customer_group = CustomerGroup::forDropdown($business_id, false, true);
+
+    return view('report.product_sell_report')
+        ->with(compact(
+            'business_locations',
+            'customers',
+            'categories',
+            'brands',
+            'customer_group',
+            'product_custom_field1',
+            'product_custom_field2'
+        ));
+}
+```
+
+
+### Step 2: Update Blade Template Headers​
+
+Update the table headers in your 
+```text
+resources/views/report/product_sell_report.blade.php
+```
+:
+
+
+```text
+<thead>
+    <tr>
+        <th>@lang('sale.product')</th>
+        <th>@lang('product.sku')</th>
+        <th id="psr_product_custom_field1">{{$product_custom_field1}}</th>
+        <th id="psr_product_custom_field2">{{$product_custom_field2}}</th>
+        <th>@lang('sale.customer_name')</th>
+        <th>@lang('lang_v1.contact_id')</th>
+        <th>@lang('lang_v1.contact_no')</th>
+        <th>@lang('sale.invoice_no')</th>
+        <th>@lang('messages.date')</th>
+        <th>@lang('sale.qty')</th>
+        <th>@lang('sale.unit_price')</th>
+        <th>@lang('sale.discount')</th>
+        <th>@lang('lang_v1.line_discount')</th>
+        <th>@lang('lang_v1.invoice_discount')</th>
+        <th>@lang('lang_v1.total_discount')</th>
+        <th>@lang('sale.tax')</th>
+        <th>@lang('sale.price_inc_tax')</th>
+        <th>@lang('sale.total')</th>
+        <th>@lang('lang_v1.payment_method')</th>
+    </tr>
+</thead>
+```
+
+
+### Step 2.1: Add Language Translations​
+
+Add the following translation keys to your 
+```text
+lang_v1
+```
+ language files:
+
+**English (en/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Line Discount',
+'invoice_discount' => 'Invoice Discount',
+'total_discount' => 'Total Discount',
+```
+
+
+**Spanish (es/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Descuento de Línea',
+'invoice_discount' => 'Descuento de Factura',
+'total_discount' => 'Descuento Total',
+```
+
+
+**French (fr/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Remise de Ligne',
+'invoice_discount' => 'Remise de Facture',
+'total_discount' => 'Remise Totale',
+```
+
+
+**German (de/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Zeilenrabatt',
+'invoice_discount' => 'Rechnungsrabatt',
+'total_discount' => 'Gesamtrabatt',
+```
+
+
+**Arabic (ar/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'خصم السطر',
+'invoice_discount' => 'خصم الفاتورة',
+'total_discount' => 'إجمالي الخصم',
+```
+
+
+**Portuguese (pt/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Desconto da Linha',
+'invoice_discount' => 'Desconto da Fatura',
+'total_discount' => 'Desconto Total',
+```
+
+
+**Italian (it/lang_v1.php)**
+
+
+```javascript
+'line_discount' => 'Sconto Riga',
+'invoice_discount' => 'Sconto Fattura',
+'total_discount' => 'Sconto Totale',
+```
+
+
+Language Support
+
+Add these translation keys to the appropriate language files in your 
+```text
+resources/lang/
+```
+ directory based on which languages your application supports.
+
+### Step 3: Update Footer Totals​
+
+Update the footer section in the same blade template:
+
+
+```text
+<tfoot>
+    <tr class="bg-gray font-17 footer-total text-center">
+        <td colspan="9"><strong>@lang('sale.total'):</strong></td>
+        <td id="footer_total_sold"></td>
+        <td></td>
+        <td></td>
+        <td>
+            <span
+                class="display_currency"
+                id="footer_line_discount"
+                data-currency_symbol="true"
+            ></span>
+        </td>
+        <td>
+            <span
+                class="display_currency"
+                id="footer_invoice_discount"
+                data-currency_symbol="true"
+            ></span>
+        </td>
+        <td>
+            <span
+                class="display_currency"
+                id="footer_total_discount"
+                data-currency_symbol="true"
+            ></span>
+        </td>
+        <td id="footer_tax"></td>
+        <td></td>
+        <td>
+            <span
+                class="display_currency"
+                id="footer_subtotal"
+                data-currency_symbol="true"
+            ></span>
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
+```
+
+
+### Step 4: Update JavaScript DataTable Configuration​
+
+Update the DataTable configuration in your 
+```text
+public/js/report.js
+```
+:
+
+
+```text
+//Product Sell Report
+if ($('table#product_sell_report_table').length == 1) {
+    $('#product_sr_date_filter').daterangepicker(
+        dateRangeSettings,
+        function (start, end) {
+            $('#product_sr_date_filter').val(
+                start.format(moment_date_format) +
+                    ' ~ ' +
+                    end.format(moment_date_format)
+            );
+            product_sell_report.ajax.reload();
+            product_sell_grouped_report.ajax.reload();
+            product_sell_report_with_purchase_table.ajax.reload();
+            $('.nav-tabs li.active')
+                .find('a[data-toggle="tab"]')
+                .trigger('shown.bs.tab');
+        }
+    );
+
+    $('#product_sr_date_filter').on(
+        'cancel.daterangepicker',
+        function (ev, picker) {
+            $('#product_sr_date_filter').val('');
+            product_sell_report.ajax.reload();
+            product_sell_grouped_report.ajax.reload();
+            product_sell_report_with_purchase_table.ajax.reload();
+            $('.nav-tabs li.active')
+                .find('a[data-toggle="tab"]')
+                .trigger('shown.bs.tab');
+        }
+    );
+
+    $('#product_sr_start_time, #product_sr_end_time')
+        .datetimepicker({
+            format: moment_time_format,
+            ignoreReadonly: true,
+        })
+        .on('dp.change', function (ev) {
+            product_sell_report.ajax.reload();
+            product_sell_report_with_purchase_table.ajax.reload();
+            product_sell_grouped_report.ajax.reload();
+            $('.nav-tabs li.active')
+                .find('a[data-toggle="tab"]')
+                .trigger('shown.bs.tab');
+        });
+
+    product_sell_report = $('table#product_sell_report_table').DataTable({
+        processing: true,
+        serverSide: true,
+        fixedHeader: false,
+        aaSorting: [[8, 'desc']], // Sort by transaction_date column
+        ajax: {
+            url: '/reports/product-sell-report',
+            data: function (d) {
+                var start = '';
+                var end = '';
+                var start_time = $('#product_sr_start_time').val();
+                var end_time = $('#product_sr_end_time').val();
+
+                if ($('#product_sr_date_filter').val()) {
+                    start = $('input#product_sr_date_filter')
+                        .data('daterangepicker')
+                        .startDate.format('YYYY-MM-DD');
+
+                    start = moment(
+                        start + ' ' + start_time,
+                        'YYYY-MM-DD' + ' ' + moment_time_format
+                    ).format('YYYY-MM-DD HH:mm');
+                    end = $('input#product_sr_date_filter')
+                        .data('daterangepicker')
+                        .endDate.format('YYYY-MM-DD');
+                    end = moment(
+                        end + ' ' + end_time,
+                        'YYYY-MM-DD' + ' ' + moment_time_format
+                    ).format('YYYY-MM-DD HH:mm');
+                }
+                d.start_date = start;
+                d.end_date = end;
+
+                d.variation_id = $('#variation_id').val();
+                d.customer_id = $('select#customer_id').val();
+                d.location_id = $('select#location_id').val();
+                d.category_id = $('select#psr_filter_category_id').val();
+                d.brand_id = $('select#psr_filter_brand_id').val();
+                d.customer_group_id = $('#psr_customer_group_id').val();
+            },
+            error: function (xhr, error, thrown) {
+                console.log('DataTables Ajax Error:', error, thrown);
+                console.log('Response:', xhr.responseText);
+            },
+        },
+        columns: [
+            { data: 'product_name', name: 'p.name' }, // 0
+            { data: 'sub_sku', name: 'v.sub_sku' }, // 1
+            {
+                data: 'product_custom_field1',
+                name: 'p.product_custom_field1',
+                visible:
+                    $('#psr_product_custom_field1').html().trim().length > 0,
+            }, // 2
+            {
+                data: 'product_custom_field2',
+                name: 'p.product_custom_field2',
+                visible:
+                    $('#psr_product_custom_field2').html().trim().length > 0,
+            }, // 3
+            { data: 'customer', name: 'c.name' }, // 4
+            { data: 'contact_id', name: 'c.contact_id' }, // 5
+            { data: 'contact_no', name: 'c.mobile' }, // 6
+            { data: 'invoice_no', name: 't.invoice_no' }, // 7
+            { data: 'transaction_date', name: 't.transaction_date' }, // 8
+            { data: 'sell_qty', name: 'transaction_sell_lines.quantity' }, // 9
+            {
+                data: 'unit_price',
+                name: 'transaction_sell_lines.unit_price_before_discount',
+            }, // 10
+            {
+                data: 'discount_amount',
+                name: 'transaction_sell_lines.line_discount_amount',
+            }, // 11 - Existing discount
+            {
+                data: 'line_discount',
+                name: 'line_discount',
+                searchable: false,
+                orderable: false,
+            }, // 12 - Line Discount
+            {
+                data: 'invoice_discount',
+                name: 'invoice_discount',
+                searchable: false,
+                orderable: false,
+            }, // 13 - Invoice Discount
+            {
+                data: 'total_discount',
+                name: 'total_discount',
+                searchable: false,
+                orderable: false,
+            }, // 14 - Total Discount
+            { data: 'tax', name: 'tax_rates.name' }, // 15
+            {
+                data: 'unit_sale_price',
+                name: 'transaction_sell_lines.unit_price_inc_tax',
+            }, // 16
+            { data: 'subtotal', name: 'subtotal', searchable: false }, // 17 - Total amount
+            {
+                data: 'payment_methods',
+                name: 'payment_methods',
+                searchable: false,
+            }, // 18
+        ],
+        fnDrawCallback: function (oSettings) {
+            $('#footer_subtotal').text(
+                sum_table_col($('#product_sell_report_table'), 'row_subtotal')
+            );
+            $('#footer_total_sold').html(
+                __sum_stock($('#product_sell_report_table'), 'sell_qty')
+            );
+
+            // NEW: Footer calculations for new discount columns
+            $('#footer_line_discount').text(
+                sum_table_col($('#product_sell_report_table'), 'line_discount')
+            );
+            $('#footer_invoice_discount').text(
+                sum_table_col(
+                    $('#product_sell_report_table'),
+                    'invoice_discount'
+                )
+            );
+            $('#footer_total_discount').text(
+                sum_table_col($('#product_sell_report_table'), 'total_discount')
+            );
+
+            $('#footer_tax').html(
+                __sum_stock($('#product_sell_report_table'), 'tax', 'left')
+            );
+            __currency_convert_recursively($('#product_sell_report_table'));
+        },
+    });
+}
+```
+
+
+## Key Features Added​
+
+### 📊 **Discount Breakdown Analysis**​
+
+  * **Line Discount** : Shows cumulative line-level discounts for each transaction
+  * **Invoice Discount** : Displays transaction-level discounts (percentage or fixed)
+  * **Total Discount** : Combines both line and invoice discounts for complete visibility
+
+
+
+### 💰 **Financial Accuracy**​
+
+  * Proper calculation of percentage and fixed discounts
+  * Currency formatting with 
+```text
+display_currency
+```
+ class
+  * Footer totals for all discount columns
+
+
+
+### 🎯 **DataTables Integration**​
+
+  * Non-searchable discount columns for better performance
+  * Proper column mapping and error handling
+  * Responsive table layout maintained
+
+
+
+## Column Sequence​
+
+
+
+<table><thead><tr><th>#<th>Column<th>Type<th>Description<tbody><tr><td>11<td>Discount<td>Existing<td>Individual line discount (% or fixed)<tr><td>12<td>Line Discount<td>NEW<td>Total line discounts for transaction<tr><td>13<td>Invoice Discount<td>NEW<td>Transaction-level discount<tr><td>14<td>Total Discount<td>NEW<td>Combined line + invoice discounts<tr><td>17<td>Total<td>Existing<td>Final amount after all discounts</td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></tbody></th></th></th></th></tr></thead></table>
+
+
+
+## Troubleshooting​
+
+### Common Issues​
+
+**DataTables Error: "Cannot set properties of undefined"**
+
+  * Verify column count matches between blade template and JavaScript
+  * Check that all new columns are included in 
+```text
+rawColumns
+```
+ array
+  * Ensure PHP method returns all expected column data
+
+
+
+**Missing Discount Calculations**
+
+  * Verify database relationships are correct
+  * Check that transaction discount fields are properly selected
+  * Ensure proper handling of null values in calculations
+
+
+
+**Footer Totals Not Updating**
+
+  * Confirm footer element IDs match JavaScript selectors
+  * Verify 
+```text
+sum_table_col
+```
+ function is available
+  * Check that 
+```text
+__currency_convert_recursively
+```
+ is called
+
+
+
+## Testing Checklist​
+
+  * ✅ Verify all discount columns display correct values
+  * ✅ Check footer totals calculate properly
+  * ✅ Test with different discount types (percentage/fixed)
+  * ✅ Confirm responsive design works on mobile
+  * ✅ Validate performance with large datasets
+  * ✅ Test filtering and sorting functionality
+
+
+
+## Performance Considerations​
+
+  * Discount calculations use optimized SQL queries
+  * Non-searchable columns reduce server load
+  * Proper indexing on 
+```text
+transaction_id
+```
+ recommended
+  * Consider caching for frequently accessed reports
+
+
+
+* * *
+
+This implementation provides comprehensive discount visibility while maintaining optimal performance and user experience.
+
+### 💬 Discussion & Questions
+
+Commenting as: **ithiyacloud5@gmail.com**
+
+Post Comment
+
+💭 No comments yet
+
+Be the first to share your thoughts!
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋

@@ -1,0 +1,1291 @@
+---
+title: "Customer Monthly Sales Report"
+sidebar_label: "Customer Monthly Sales Report"
+slug: /customer-monthly-sales-report-customer-monthly-sales-report-ultimate-pos-tutorials-10_08_2025-18-00-08
+hide_title: true
+toc: false
+---
+
+# Customer Monthly Sales Report - Complete Implementation Guide
+
+This comprehensive guide walks you through implementing a powerful Customer Monthly Sales Report feature in Ultimate POS, providing detailed insights into customer purchasing patterns with monthly breakdowns and profit analysis.
+
+## Overview​
+
+The Customer Monthly Sales Report feature provides:
+
+  * **Monthly Sales Breakdown** : View sales for each customer across all 12 months
+  * **Profit Analysis** : Calculate gross profit and profit margins per customer
+  * **Summary Statistics** : Total customers, transactions, sales, and profit metrics
+  * **Advanced Filtering** : Filter by location, payment status, staff, and more
+  * **Customer Details Modal** : Detailed view of individual customer transactions
+  * **Responsive Design** : Modern UI with interactive summary cards
+
+
+
+![Customer Monthly Sales Report](/img/docs/customer-monthly-sales-report-1.jpeg)
+
+## Prerequisites​
+
+  * Ultimate POS system installed and running
+  * Laravel 8+ with proper database setup
+  * Access to database and codebase
+  * Basic knowledge of Laravel, PHP, Blade templates, and DataTables
+  * Understanding of database relationships
+
+
+
+## Step 1: Database Structure​
+
+The report uses existing Ultimate POS tables. Ensure these tables exist and have proper relationships:
+
+
+```text
+-- Core tables used
+- transactions
+- transaction_sell_lines
+- transaction_sell_lines_purchase_lines
+- purchase_lines
+- contacts
+- variations
+- products
+- business_locations
+- users
+```
+
+
+## Step 2: Create the Controller​
+
+Create the controller file at 
+```text
+app/Http/Controllers/CustomerMonthlySalesController.php
+```
+:
+
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use App\Contact;
+use App\Transaction;
+use App\BusinessLocation;
+use App\User;
+use Yajra\DataTables\Facades\DataTables;
+use App\Utils\TransactionUtil;
+use App\Utils\ModuleUtil;
+use App\Utils\BusinessUtil;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+
+class CustomerMonthlySalesController extends Controller
+{
+    /**
+     * All Utils instance.
+     */
+    protected $transactionUtil;
+    protected $moduleUtil;
+    protected $businessUtil;
+
+    /**
+     * Constructor
+     */
+    public function __construct(TransactionUtil $transactionUtil, ModuleUtil $moduleUtil, BusinessUtil $businessUtil)
+    {
+        $this->transactionUtil = $transactionUtil;
+        $this->moduleUtil = $moduleUtil;
+        $this->businessUtil = $businessUtil;
+    }
+
+    /**
+     * Display customer monthly sales report
+     */
+    public function index()
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+
+        // Get dropdowns for filters
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+        $customers = Contact::customersDropdown($business_id, false);
+        $users = User::forDropdown($business_id, false);
+
+        // Get payment types for filters
+        $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
+        $payment_types = collect($payment_types)->prepend(__('lang_v1.all'), '');
+
+        return view('report.customer_monthly_sales')
+            ->with(compact(
+                'business_locations',
+                'customers',
+                'users',
+                'payment_types'
+            ));
+    }
+
+    /**
+     * Get customer monthly sales data for DataTables
+     */
+    public function getCustomerMonthlyData(Request $request)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $year = $request->get('year', date('Y'));
+
+        try {
+            // Build base query for customer sales data
+            $query = Transaction::join('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftjoin('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftjoin('transaction_sell_lines_purchase_lines as tspl', 'tsl.id', '=', 'tspl.sell_line_id')
+                ->leftjoin('purchase_lines as pl', 'tspl.purchase_line_id', '=', 'pl.id')
+                ->leftjoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id');
+
+            // Apply filters
+            $this->applyFilters($query, $request);
+
+            // Group by customer and get monthly data
+            $monthlyData = $query->select([
+                'c.id as customer_id',
+                'c.name as customer_name',
+                'c.supplier_business_name',
+                DB::raw('MONTH(transactions.transaction_date) as month'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * tsl.unit_price_inc_tax) as monthly_sales'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * COALESCE(pl.purchase_price_inc_tax, v.default_purchase_price, tsl.unit_price_inc_tax * 0.7)) as monthly_purchase_cost')
+            ])
+                ->groupBy('c.id', 'c.name', 'c.supplier_business_name', DB::raw('MONTH(transactions.transaction_date)'))
+                ->get();
+
+            // Transform data into the required format
+            $customerData = [];
+            foreach ($monthlyData as $data) {
+                $customerId = $data->customer_id;
+
+                if (!isset($customerData[$customerId])) {
+                    $customerName = $data->customer_name;
+                    if (!empty($data->supplier_business_name)) {
+                        $customerName = $data->supplier_business_name . ' - ' . $customerName;
+                    }
+
+                    $customerData[$customerId] = [
+                        'customer_id' => $customerId,
+                        'customer_name' => $customerName,
+                        'jan' => 0,
+                        'feb' => 0,
+                        'mar' => 0,
+                        'apr' => 0,
+                        'may' => 0,
+                        'jun' => 0,
+                        'jul' => 0,
+                        'aug' => 0,
+                        'sep' => 0,
+                        'oct' => 0,
+                        'nov' => 0,
+                        'dec' => 0,
+                        'jan_cost' => 0,
+                        'feb_cost' => 0,
+                        'mar_cost' => 0,
+                        'apr_cost' => 0,
+                        'may_cost' => 0,
+                        'jun_cost' => 0,
+                        'jul_cost' => 0,
+                        'aug_cost' => 0,
+                        'sep_cost' => 0,
+                        'oct_cost' => 0,
+                        'nov_cost' => 0,
+                        'dec_cost' => 0,
+                        'total_sales' => 0,
+                        'total_cost' => 0
+                    ];
+                }
+
+                $monthNames = [
+                    1 => 'jan',
+                    2 => 'feb',
+                    3 => 'mar',
+                    4 => 'apr',
+                    5 => 'may',
+                    6 => 'jun',
+                    7 => 'jul',
+                    8 => 'aug',
+                    9 => 'sep',
+                    10 => 'oct',
+                    11 => 'nov',
+                    12 => 'dec'
+                ];
+
+                $monthKey = $monthNames[$data->month];
+                $customerData[$customerId][$monthKey] = $data->monthly_sales;
+                $customerData[$customerId][$monthKey . '_cost'] = $data->monthly_purchase_cost;
+                $customerData[$customerId]['total_sales'] += $data->monthly_sales;
+                $customerData[$customerId]['total_cost'] += $data->monthly_purchase_cost;
+            }
+
+            // Convert to collection for DataTables
+            $collection = collect(array_values($customerData));
+
+            return DataTables::of($collection)
+                ->addColumn('action', function ($row) {
+                    return '<button type="button" class="btn btn-info btn-xs view-customer-details" 
+                            data-customer-id="' . $row['customer_id'] . '">
+                        <i class="fa fa-eye"></i> ' . __('messages.view') . '
+                    </button>';
+                })
+                ->editColumn('jan', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jan'], 2) . '</span>';
+                })
+                ->editColumn('feb', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['feb'], 2) . '</span>';
+                })
+                ->editColumn('mar', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['mar'], 2) . '</span>';
+                })
+                ->editColumn('apr', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['apr'], 2) . '</span>';
+                })
+                ->editColumn('may', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['may'], 2) . '</span>';
+                })
+                ->editColumn('jun', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jun'], 2) . '</span>';
+                })
+                ->editColumn('jul', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jul'], 2) . '</span>';
+                })
+                ->editColumn('aug', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['aug'], 2) . '</span>';
+                })
+                ->editColumn('sep', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['sep'], 2) . '</span>';
+                })
+                ->editColumn('oct', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['oct'], 2) . '</span>';
+                })
+                ->editColumn('nov', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['nov'], 2) . '</span>';
+                })
+                ->editColumn('dec', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['dec'], 2) . '</span>';
+                })
+                ->editColumn('total_sales', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true"><strong>' .
+                        number_format($row['total_sales'], 2) . '</strong></span>';
+                })
+                ->addColumn('gross_profit', function ($row) {
+                    $profit = $row['total_sales'] - $row['total_cost'];
+                    $class = $profit >= 0 ? 'text-success' : 'text-danger';
+                    return '<span class="display_currency ' . $class . '" data-currency_symbol="true"><strong>' .
+                        number_format($profit, 2) . '</strong></span>';
+                })
+                ->addColumn('gross_profit_percent', function ($row) {
+                    $profit = $row['total_sales'] - $row['total_cost'];
+                    $percentage = $row['total_sales'] > 0 ? ($profit / $row['total_sales']) * 100 : 0;
+                    $class = $percentage >= 0 ? 'text-success' : 'text-danger';
+                    return '<span class="' . $class . '"><strong>' .
+                        number_format($percentage, 2) . '%</strong></span>';
+                })
+                ->rawColumns([
+                    'action',
+                    'jan',
+                    'feb',
+                    'mar',
+                    'apr',
+                    'may',
+                    'jun',
+                    'jul',
+                    'aug',
+                    'sep',
+                    'oct',
+                    'nov',
+                    'dec',
+                    'total_sales',
+                    'gross_profit',
+                    'gross_profit_percent'
+                ])
+                ->make(true);
+        } catch (\Exception $e) {
+            \Log::error('Customer Monthly Sales Data Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Error loading customer monthly sales data'], 500);
+        }
+    }
+
+    /**
+     * Get summary statistics
+     */
+    public function getSummary(Request $request)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $year = $request->get('year', date('Y'));
+
+            $query = Transaction::join('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftjoin('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftjoin('transaction_sell_lines_purchase_lines as tspl', 'tsl.id', '=', 'tspl.sell_line_id')
+                ->leftjoin('purchase_lines as pl', 'tspl.purchase_line_id', '=', 'pl.id')
+                ->leftjoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id');
+
+            // Apply same filters
+            $this->applyFilters($query, $request);
+
+            $summary = $query->select([
+                DB::raw('COUNT(DISTINCT c.id) as total_customers'),
+                DB::raw('COUNT(DISTINCT transactions.id) as total_transactions'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * tsl.unit_price_inc_tax) as total_sales'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * COALESCE(pl.purchase_price_inc_tax, v.default_purchase_price, tsl.unit_price_inc_tax * 0.7)) as total_cost')
+            ])->first();
+
+            $total_profit = $summary->total_sales - $summary->total_cost;
+            $profit_margin = $summary->total_sales > 0 ? ($total_profit / $summary->total_sales) * 100 : 0;
+
+            return response()->json([
+                'total_customers' => (int)$summary->total_customers,
+                'total_transactions' => (int)$summary->total_transactions,
+                'total_sales' => $summary->total_sales,
+                'total_cost' => $summary->total_cost,
+                'total_profit' => $total_profit,
+                'profit_margin' => $profit_margin,
+                'average_per_customer' => $summary->total_customers > 0 ? ($summary->total_sales / $summary->total_customers) : 0
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Customer Monthly Sales Summary Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Summary calculation failed'], 500);
+        }
+    }
+
+    /**
+     * Get customer details for a specific customer
+     */
+    public function getCustomerDetails(Request $request, $customerId)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $year = $request->get('year', date('Y'));
+
+            \Log::info('Getting customer details', ['customer_id' => $customerId, 'year' => $year]);
+
+            // Get customer info
+            $customer = Contact::where('business_id', $business_id)
+                ->where('id', $customerId)
+                ->first();
+
+            if (!$customer) {
+                return response()->json(['error' => 'Customer not found'], 404);
+            }
+
+            // Get transactions for this customer and year
+            $transactions = Transaction::join('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftJoin('products as p', 'tsl.product_id', '=', 'p.id')
+                ->leftJoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.contact_id', $customerId)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id')
+                ->select([
+                    'transactions.id as transaction_id',
+                    'transactions.invoice_no',
+                    'transactions.transaction_date',
+                    'transactions.payment_status',
+                    'p.name as product_name',
+                    'v.name as variation_name',
+                    'tsl.quantity',
+                    'tsl.unit_price_inc_tax',
+                    DB::raw('(tsl.quantity * tsl.unit_price_inc_tax) as line_total'),
+                    DB::raw('MONTH(transactions.transaction_date) as month'),
+                    DB::raw('MONTHNAME(transactions.transaction_date) as month_name')
+                ])
+                ->orderBy('transactions.transaction_date', 'desc')
+                ->limit(50) // Limit to last 50 transactions
+                ->get();
+
+            \Log::info('Found transactions', ['count' => $transactions->count()]);
+
+            // Calculate summary data
+            $totalAmount = $transactions->sum('line_total');
+            $totalQuantity = $transactions->sum('quantity');
+            $totalTransactions = $transactions->groupBy('transaction_id')->count();
+            $averagePerTransaction = $totalTransactions > 0 ? ($totalAmount / $totalTransactions) : 0;
+
+            // Group by month for monthly summary
+            $monthlySummary = $transactions->groupBy('month')->map(function ($monthTransactions, $month) {
+                return [
+                    'month' => $month,
+                    'month_name' => $monthTransactions->first()->month_name,
+                    'total_transactions' => $monthTransactions->groupBy('transaction_id')->count(),
+                    'total_amount' => $monthTransactions->sum('line_total'),
+                    'total_quantity' => $monthTransactions->sum('quantity')
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'customer' => [
+                    'id' => $customer->id,
+                    'name' => $customer->name,
+                    'supplier_business_name' => $customer->supplier_business_name,
+                    'contact_id' => $customer->contact_id,
+                    'mobile' => $customer->mobile,
+                    'email' => $customer->email,
+                    'address_line_1' => $customer->address_line_1,
+                    'city' => $customer->city,
+                    'state' => $customer->state,
+                    'country' => $customer->country,
+                ],
+                'transactions' => $transactions->map(function ($transaction) {
+                    return [
+                        'transaction_id' => $transaction->transaction_id,
+                        'invoice_no' => $transaction->invoice_no,
+                        'transaction_date' => $transaction->transaction_date,
+                        'payment_status' => $transaction->payment_status,
+                        'product_name' => $transaction->product_name .
+                            ($transaction->variation_name ? ' - ' . $transaction->variation_name : ''),
+                        'quantity' => $transaction->quantity,
+                        'unit_price_inc_tax' => $transaction->unit_price_inc_tax,
+                        'line_total' => $transaction->line_total,
+                        'month' => $transaction->month,
+                        'month_name' => $transaction->month_name
+                    ];
+                }),
+                'monthly_summary' => $monthlySummary,
+                'overall_summary' => [
+                    'total_transactions' => $totalTransactions,
+                    'total_amount' => $totalAmount,
+                    'total_quantity' => $totalQuantity,
+                    'average_per_transaction' => $averagePerTransaction
+                ],
+                'year' => $year
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Customer Details Error: ' . $e->getMessage(), [
+                'customer_id' => $customerId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Error loading customer details: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Apply filters to query
+     */
+    private function applyFilters($query, $request)
+    {
+        // Location filter
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('transactions.location_id', $permitted_locations);
+        }
+
+        if (!empty($request->location_id)) {
+            $query->where('transactions.location_id', $request->location_id);
+        }
+
+        // Customer filter
+        if (!empty($request->customer_id)) {
+            $query->where('transactions.contact_id', $request->customer_id);
+        }
+
+        // Customer name search
+        if (!empty($request->customer_name)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('c.name', 'like', '%' . $request->customer_name . '%')
+                    ->orWhere('c.supplier_business_name', 'like', '%' . $request->customer_name . '%');
+            });
+        }
+
+        // Payment status filter
+        if (!empty($request->payment_status)) {
+            $query->where('transactions.payment_status', $request->payment_status);
+        }
+
+        // Payment method filter
+        if (!empty($request->payment_method)) {
+            $query->whereHas('payment_lines', function ($q) use ($request) {
+                $q->where('method', $request->payment_method);
+            });
+        }
+
+        // User filter
+        if (!empty($request->user_id)) {
+            $query->where('transactions.created_by', $request->user_id);
+        }
+    }
+}
+```
+
+
+## Step 3: Create the Blade View​
+
+Create the view file at 
+```text
+resources/views/report/customer_monthly_sales.blade.php
+```
+:
+
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use App\Contact;
+use App\Transaction;
+use App\BusinessLocation;
+use App\User;
+use Yajra\DataTables\Facades\DataTables;
+use App\Utils\TransactionUtil;
+use App\Utils\ModuleUtil;
+use App\Utils\BusinessUtil;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+
+class CustomerMonthlySalesController extends Controller
+{
+    /**
+     * All Utils instance.
+     */
+    protected $transactionUtil;
+    protected $moduleUtil;
+    protected $businessUtil;
+
+    /**
+     * Constructor
+     */
+    public function __construct(TransactionUtil $transactionUtil, ModuleUtil $moduleUtil, BusinessUtil $businessUtil)
+    {
+        $this->transactionUtil = $transactionUtil;
+        $this->moduleUtil = $moduleUtil;
+        $this->businessUtil = $businessUtil;
+    }
+
+    /**
+     * Display customer monthly sales report
+     */
+    public function index()
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+
+        // Get dropdowns for filters
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+        $customers = Contact::customersDropdown($business_id, false);
+        $users = User::forDropdown($business_id, false);
+
+        // Get payment types for filters
+        $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
+        $payment_types = collect($payment_types)->prepend(__('lang_v1.all'), '');
+
+        return view('report.customer_monthly_sales')
+            ->with(compact(
+                'business_locations',
+                'customers',
+                'users',
+                'payment_types'
+            ));
+    }
+
+    /**
+     * Get customer monthly sales data for DataTables
+     */
+    public function getCustomerMonthlyData(Request $request)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $year = $request->get('year', date('Y'));
+
+        try {
+            // Build base query for customer sales data
+            $query = Transaction::join('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftjoin('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftjoin('transaction_sell_lines_purchase_lines as tspl', 'tsl.id', '=', 'tspl.sell_line_id')
+                ->leftjoin('purchase_lines as pl', 'tspl.purchase_line_id', '=', 'pl.id')
+                ->leftjoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id');
+
+            // Apply filters
+            $this->applyFilters($query, $request);
+
+            // Group by customer and get monthly data
+            $monthlyData = $query->select([
+                'c.id as customer_id',
+                'c.name as customer_name',
+                'c.supplier_business_name',
+                DB::raw('MONTH(transactions.transaction_date) as month'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * tsl.unit_price_inc_tax) as monthly_sales'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * COALESCE(pl.purchase_price_inc_tax, v.default_purchase_price, tsl.unit_price_inc_tax * 0.7)) as monthly_purchase_cost')
+            ])
+                ->groupBy('c.id', 'c.name', 'c.supplier_business_name', DB::raw('MONTH(transactions.transaction_date)'))
+                ->get();
+
+            // Transform data into the required format
+            $customerData = [];
+            foreach ($monthlyData as $data) {
+                $customerId = $data->customer_id;
+
+                if (!isset($customerData[$customerId])) {
+                    $customerName = $data->customer_name;
+                    if (!empty($data->supplier_business_name)) {
+                        $customerName = $data->supplier_business_name . ' - ' . $customerName;
+                    }
+
+                    $customerData[$customerId] = [
+                        'customer_id' => $customerId,
+                        'customer_name' => $customerName,
+                        'jan' => 0,
+                        'feb' => 0,
+                        'mar' => 0,
+                        'apr' => 0,
+                        'may' => 0,
+                        'jun' => 0,
+                        'jul' => 0,
+                        'aug' => 0,
+                        'sep' => 0,
+                        'oct' => 0,
+                        'nov' => 0,
+                        'dec' => 0,
+                        'jan_cost' => 0,
+                        'feb_cost' => 0,
+                        'mar_cost' => 0,
+                        'apr_cost' => 0,
+                        'may_cost' => 0,
+                        'jun_cost' => 0,
+                        'jul_cost' => 0,
+                        'aug_cost' => 0,
+                        'sep_cost' => 0,
+                        'oct_cost' => 0,
+                        'nov_cost' => 0,
+                        'dec_cost' => 0,
+                        'total_sales' => 0,
+                        'total_cost' => 0
+                    ];
+                }
+
+                $monthNames = [
+                    1 => 'jan',
+                    2 => 'feb',
+                    3 => 'mar',
+                    4 => 'apr',
+                    5 => 'may',
+                    6 => 'jun',
+                    7 => 'jul',
+                    8 => 'aug',
+                    9 => 'sep',
+                    10 => 'oct',
+                    11 => 'nov',
+                    12 => 'dec'
+                ];
+
+                $monthKey = $monthNames[$data->month];
+                $customerData[$customerId][$monthKey] = $data->monthly_sales;
+                $customerData[$customerId][$monthKey . '_cost'] = $data->monthly_purchase_cost;
+                $customerData[$customerId]['total_sales'] += $data->monthly_sales;
+                $customerData[$customerId]['total_cost'] += $data->monthly_purchase_cost;
+            }
+
+            // Convert to collection for DataTables
+            $collection = collect(array_values($customerData));
+
+            return DataTables::of($collection)
+                ->addColumn('action', function ($row) {
+                    return '<button type="button" class="btn btn-info btn-xs view-customer-details" 
+                            data-customer-id="' . $row['customer_id'] . '">
+                        <i class="fa fa-eye"></i> ' . __('messages.view') . '
+                    </button>';
+                })
+                ->editColumn('jan', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jan'], 2) . '</span>';
+                })
+                ->editColumn('feb', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['feb'], 2) . '</span>';
+                })
+                ->editColumn('mar', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['mar'], 2) . '</span>';
+                })
+                ->editColumn('apr', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['apr'], 2) . '</span>';
+                })
+                ->editColumn('may', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['may'], 2) . '</span>';
+                })
+                ->editColumn('jun', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jun'], 2) . '</span>';
+                })
+                ->editColumn('jul', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['jul'], 2) . '</span>';
+                })
+                ->editColumn('aug', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['aug'], 2) . '</span>';
+                })
+                ->editColumn('sep', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['sep'], 2) . '</span>';
+                })
+                ->editColumn('oct', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['oct'], 2) . '</span>';
+                })
+                ->editColumn('nov', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['nov'], 2) . '</span>';
+                })
+                ->editColumn('dec', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">' .
+                        number_format($row['dec'], 2) . '</span>';
+                })
+                ->editColumn('total_sales', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true"><strong>' .
+                        number_format($row['total_sales'], 2) . '</strong></span>';
+                })
+                ->addColumn('gross_profit', function ($row) {
+                    $profit = $row['total_sales'] - $row['total_cost'];
+                    $class = $profit >= 0 ? 'text-success' : 'text-danger';
+                    return '<span class="display_currency ' . $class . '" data-currency_symbol="true"><strong>' .
+                        number_format($profit, 2) . '</strong></span>';
+                })
+                ->addColumn('gross_profit_percent', function ($row) {
+                    $profit = $row['total_sales'] - $row['total_cost'];
+                    $percentage = $row['total_sales'] > 0 ? ($profit / $row['total_sales']) * 100 : 0;
+                    $class = $percentage >= 0 ? 'text-success' : 'text-danger';
+                    return '<span class="' . $class . '"><strong>' .
+                        number_format($percentage, 2) . '%</strong></span>';
+                })
+                ->rawColumns([
+                    'action',
+                    'jan',
+                    'feb',
+                    'mar',
+                    'apr',
+                    'may',
+                    'jun',
+                    'jul',
+                    'aug',
+                    'sep',
+                    'oct',
+                    'nov',
+                    'dec',
+                    'total_sales',
+                    'gross_profit',
+                    'gross_profit_percent'
+                ])
+                ->make(true);
+        } catch (\Exception $e) {
+            \Log::error('Customer Monthly Sales Data Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Error loading customer monthly sales data'], 500);
+        }
+    }
+
+    /**
+     * Get summary statistics
+     */
+    public function getSummary(Request $request)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $year = $request->get('year', date('Y'));
+
+            $query = Transaction::join('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftjoin('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftjoin('transaction_sell_lines_purchase_lines as tspl', 'tsl.id', '=', 'tspl.sell_line_id')
+                ->leftjoin('purchase_lines as pl', 'tspl.purchase_line_id', '=', 'pl.id')
+                ->leftjoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id');
+
+            // Apply same filters
+            $this->applyFilters($query, $request);
+
+            $summary = $query->select([
+                DB::raw('COUNT(DISTINCT c.id) as total_customers'),
+                DB::raw('COUNT(DISTINCT transactions.id) as total_transactions'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * tsl.unit_price_inc_tax) as total_sales'),
+                DB::raw('SUM((tsl.quantity - COALESCE(tsl.quantity_returned, 0)) * COALESCE(pl.purchase_price_inc_tax, v.default_purchase_price, tsl.unit_price_inc_tax * 0.7)) as total_cost')
+            ])->first();
+
+            $total_profit = $summary->total_sales - $summary->total_cost;
+            $profit_margin = $summary->total_sales > 0 ? ($total_profit / $summary->total_sales) * 100 : 0;
+
+            return response()->json([
+                'total_customers' => (int)$summary->total_customers,
+                'total_transactions' => (int)$summary->total_transactions,
+                'total_sales' => $summary->total_sales,
+                'total_cost' => $summary->total_cost,
+                'total_profit' => $total_profit,
+                'profit_margin' => $profit_margin,
+                'average_per_customer' => $summary->total_customers > 0 ? ($summary->total_sales / $summary->total_customers) : 0
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Customer Monthly Sales Summary Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Summary calculation failed'], 500);
+        }
+    }
+
+    /**
+     * Get customer details for a specific customer
+     */
+    public function getCustomerDetails(Request $request, $customerId)
+    {
+        if (!auth()->user()->can('sell.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $year = $request->get('year', date('Y'));
+
+            \Log::info('Getting customer details', ['customer_id' => $customerId, 'year' => $year]);
+
+            // Get customer info
+            $customer = Contact::where('business_id', $business_id)
+                ->where('id', $customerId)
+                ->first();
+
+            if (!$customer) {
+                return response()->json(['error' => 'Customer not found'], 404);
+            }
+
+            // Get transactions for this customer and year
+            $transactions = Transaction::join('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
+                ->leftJoin('products as p', 'tsl.product_id', '=', 'p.id')
+                ->leftJoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.contact_id', $customerId)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->whereYear('transactions.transaction_date', $year)
+                ->whereNull('tsl.parent_sell_line_id')
+                ->select([
+                    'transactions.id as transaction_id',
+                    'transactions.invoice_no',
+                    'transactions.transaction_date',
+                    'transactions.payment_status',
+                    'p.name as product_name',
+                    'v.name as variation_name',
+                    'tsl.quantity',
+                    'tsl.unit_price_inc_tax',
+                    DB::raw('(tsl.quantity * tsl.unit_price_inc_tax) as line_total'),
+                    DB::raw('MONTH(transactions.transaction_date) as month'),
+                    DB::raw('MONTHNAME(transactions.transaction_date) as month_name')
+                ])
+                ->orderBy('transactions.transaction_date', 'desc')
+                ->limit(50) // Limit to last 50 transactions
+                ->get();
+
+            \Log::info('Found transactions', ['count' => $transactions->count()]);
+
+            // Calculate summary data
+            $totalAmount = $transactions->sum('line_total');
+            $totalQuantity = $transactions->sum('quantity');
+            $totalTransactions = $transactions->groupBy('transaction_id')->count();
+            $averagePerTransaction = $totalTransactions > 0 ? ($totalAmount / $totalTransactions) : 0;
+
+            // Group by month for monthly summary
+            $monthlySummary = $transactions->groupBy('month')->map(function ($monthTransactions, $month) {
+                return [
+                    'month' => $month,
+                    'month_name' => $monthTransactions->first()->month_name,
+                    'total_transactions' => $monthTransactions->groupBy('transaction_id')->count(),
+                    'total_amount' => $monthTransactions->sum('line_total'),
+                    'total_quantity' => $monthTransactions->sum('quantity')
+                ];
+            })->values();
+
+            return response()->json([
+                'success' => true,
+                'customer' => [
+                    'id' => $customer->id,
+                    'name' => $customer->name,
+                    'supplier_business_name' => $customer->supplier_business_name,
+                    'contact_id' => $customer->contact_id,
+                    'mobile' => $customer->mobile,
+                    'email' => $customer->email,
+                    'address_line_1' => $customer->address_line_1,
+                    'city' => $customer->city,
+                    'state' => $customer->state,
+                    'country' => $customer->country,
+                ],
+                'transactions' => $transactions->map(function ($transaction) {
+                    return [
+                        'transaction_id' => $transaction->transaction_id,
+                        'invoice_no' => $transaction->invoice_no,
+                        'transaction_date' => $transaction->transaction_date,
+                        'payment_status' => $transaction->payment_status,
+                        'product_name' => $transaction->product_name .
+                            ($transaction->variation_name ? ' - ' . $transaction->variation_name : ''),
+                        'quantity' => $transaction->quantity,
+                        'unit_price_inc_tax' => $transaction->unit_price_inc_tax,
+                        'line_total' => $transaction->line_total,
+                        'month' => $transaction->month,
+                        'month_name' => $transaction->month_name
+                    ];
+                }),
+                'monthly_summary' => $monthlySummary,
+                'overall_summary' => [
+                    'total_transactions' => $totalTransactions,
+                    'total_amount' => $totalAmount,
+                    'total_quantity' => $totalQuantity,
+                    'average_per_transaction' => $averagePerTransaction
+                ],
+                'year' => $year
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Customer Details Error: ' . $e->getMessage(), [
+                'customer_id' => $customerId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Error loading customer details: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Apply filters to query
+     */
+    private function applyFilters($query, $request)
+    {
+        // Location filter
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('transactions.location_id', $permitted_locations);
+        }
+
+        if (!empty($request->location_id)) {
+            $query->where('transactions.location_id', $request->location_id);
+        }
+
+        // Customer filter
+        if (!empty($request->customer_id)) {
+            $query->where('transactions.contact_id', $request->customer_id);
+        }
+
+        // Customer name search
+        if (!empty($request->customer_name)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('c.name', 'like', '%' . $request->customer_name . '%')
+                    ->orWhere('c.supplier_business_name', 'like', '%' . $request->customer_name . '%');
+            });
+        }
+
+        // Payment status filter
+        if (!empty($request->payment_status)) {
+            $query->where('transactions.payment_status', $request->payment_status);
+        }
+
+        // Payment method filter
+        if (!empty($request->payment_method)) {
+            $query->whereHas('payment_lines', function ($q) use ($request) {
+                $q->where('method', $request->payment_method);
+            });
+        }
+
+        // User filter
+        if (!empty($request->user_id)) {
+            $query->where('transactions.created_by', $request->user_id);
+        }
+    }
+}
+```
+
+
+## Step 4: Add Routes​
+
+Add the following routes to your 
+```text
+routes/web.php
+```
+ or module routes file:
+
+
+```text
+use App\Http\Controllers\CustomerMonthlySalesController;
+
+
+Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu', 'CheckUserLogin'])->group(function () {
+
+    // After Route::get('/reports/get-stock-value', [ReportController::class, 'getStockValue']);
+
+
+    // Customer Monthly Sales Report Routes
+    Route::get('/reports/customer-monthly-sales', [CustomerMonthlySalesController::class, 'index'])
+        ->name('reports.customer-monthly-sales');
+
+    Route::get('/reports/customer-monthly-sales/data', [CustomerMonthlySalesController::class, 'getCustomerMonthlyData'])
+        ->name('reports.customer-monthly-sales.data');
+
+    Route::get('/reports/customer-monthly-sales/summary', [CustomerMonthlySalesController::class, 'getSummary'])
+        ->name('reports.customer-monthly-sales.summary');
+
+    Route::get('/reports/customer-monthly-sales/details/{customerId}', [CustomerMonthlySalesController::class, 'getCustomerDetails'])
+        ->name('reports.customer-monthly-sales.details');
+
+
+
+});
+```
+
+
+## Step 5: Navigation Menu Integration​
+
+Add the Customer Monthly Sales Report route to the AdminSidebarMenu.php file. Can place it after this nafigation:
+
+
+```javascript
+ if (config('constants.show_report_607') == true) {
+    $sub->url(
+        action([\App\Http\Controllers\ReportController::c'saleReport']),
+        'Report 607 (' . __('business.sale') . ')',
+        ['icon' => '', 'active' => request()->segment('sale-report']
+    );
+}
+```
+
+
+
+```javascript
+ // Customer Monthly Sales Report
+    if (auth()->user()->can('view_reports')) {
+        $sub->url(
+            route('reports.customer-monthly-sales'),
+            __('Customer Monthly Sales Report'),
+            [
+                'icon' => 'fa fa-calendar-o',
+                'active' => request()->segment(2) == 'customer-monthly-sales' ||
+                    (request()->segment(1) == 'reports' &&
+                        request()->segment(2) == 'customer-monthly-sales')
+            ]
+        );
+    }
+```
+
+
+## Key Features Explained​
+
+### 1\. **Monthly Sales Breakdown**​
+
+The report shows sales data for each customer across all 12 months, making it easy to identify seasonal patterns and customer behavior.
+
+### 2\. **Profit Analysis**​
+
+  * **Gross Profit ($)** : Calculated as Sales - Cost of Goods Sold
+  * **Gross Profit (%)** : Profit margin percentage for each customer
+  * Color coding: Green for positive, Red for negative profits
+
+
+
+### 3\. **Advanced Filtering**​
+
+  * Customer name search
+  * Business location filter
+  * Payment status filter
+  * Payment method filter
+  * Staff/user filter
+  * Year selection
+
+
+
+### 4\. **Interactive Summary Cards**​
+
+Real-time summary statistics that update based on applied filters:
+
+  * Total customers count
+  * Total transactions
+  * Total sales amount
+  * Total profit
+  * Overall profit margin
+  * Average sales per customer
+
+
+
+### 5\. **Customer Details Modal**​
+
+Click the "View" button to see detailed information about any customer:
+
+  * Customer contact information
+  * Recent transaction history
+  * Monthly breakdown (if implemented)
+
+
+
+### 6\. **Responsive Design**​
+
+  * Mobile-friendly interface
+  * Sticky columns for better navigation
+  * Horizontal scrolling for the monthly data table
+
+
+
+## Database Query Optimization​
+
+The report uses optimized queries with proper joins and indexing:
+
+
+```text
+-- Recommended indexes for better performance
+CREATE INDEX idx_transactions_business_date ON transactions(business_id, transaction_date);
+CREATE INDEX idx_transactions_contact_date ON transactions(contact_id, transaction_date);
+CREATE INDEX idx_transaction_sell_lines_transaction ON transaction_sell_lines(transaction_id);
+```
+
+
+## Troubleshooting​
+
+### Performance Optimization:​
+
+  1. **Large Dataset** : Consider adding pagination or date range limits
+  2. **Slow Queries** : Add database indexes on frequently queried columns
+  3. **Memory Issues** : Implement server-side processing for very large datasets
+
+
+
+## Advanced Customizations​
+
+### Adding New Metrics:​
+
+You can extend the report by adding new calculated columns:
+
+
+```text
+// In the DataTables response
+->addColumn('average_order_value', function ($row) {
+    $avg = $row['total_transactions'] > 0 ? ($row['total_sales'] / $row['total_transactions']) : 0;
+    return '<span class="display_currency" data-currency_symbol="true">' . 
+           number_format($avg, 2) . '</span>';
+})
+```
+
+
+### Custom Date Ranges:​
+
+Replace the year filter with custom date range:
+
+
+```javascript
+// Add to filters
+<div class="col-md-2">
+    <div class="form-group">
+        {!! Form::label('start_date', 'Start Date:') !!}
+        {!! Form::text('start_date', null, ['class' => 'form-control', 'id' => 'start_date', 'readonly']); !!}
+    </div>
+</div>
+```
+
+
+### Export Functionality:​
+
+If you need export functionality later, you can add:
+
+
+```php
+// In controller
+public function export(Request $request)
+{
+    // Implementation for Excel/PDF export
+    return Excel::download(new CustomerMonthlySalesExport($filters), 'customer_monthly_sales.xlsx');
+}
+```
+
+
+## Conclusion​
+
+This Customer Monthly Sales Report provides comprehensive insights into customer purchasing patterns with a modern, responsive interface. The implementation includes advanced filtering, real-time summaries, and detailed customer views, making it a powerful tool for business analysis.
+
+The report helps identify:
+
+  * Top performing customers
+  * Seasonal buying patterns
+  * Profit margins by customer
+  * Customer transaction trends
+  * Sales performance across different time periods
+
+
+
+### 💬 Discussion & Questions
+
+Commenting as: **ithiyacloud5@gmail.com**
+
+Post Comment
+
+💭 No comments yet
+
+Be the first to share your thoughts!
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋

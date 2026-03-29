@@ -1,0 +1,19 @@
+/* 
+ * Low-End PC Mode (De-bloat)
+ * Drastically reduces CPU/GPU rendering overhead by stripping box-shadows, 
+ * CSS transitions, and animations from the entire DOM.
+ */
+
+body.low-end-pc * {
+    box-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Specific heavy elements overrides if necessary */
+body.low-end-pc .modal-content,
+body.low-end-pc .box,
+body.low-end-pc .select2-dropdown,
+body.low-end-pc .dropdown-menu {
+    border-radius: 0 !important; /* Optional: simple square edges render faster than radiused anti-aliased ones */
+}

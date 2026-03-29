@@ -1,0 +1,1251 @@
+---
+title: "Currency Management System - Complete Implementation Guide"
+sidebar_label: "Currency Management System - Complete Implementation Guide"
+slug: /currency-management-system---complete-implementation-guide-currency-management-system---complete-implementation-guide-ultimate-pos-tutorials-30_10_20
+hide_title: true
+toc: false
+---
+
+# Currency Management System for Ultimate POS
+
+This comprehensive guide covers the complete implementation of a Currency Management system in Ultimate POS with Laravel, including CRUD operations, DataTables integration, Tailwind CSS styling, and proper handling of currency formatting options.
+
+![Index page](/img/docs/index-page-1.png)
+
+![Edit page](/img/docs/edit-page-2.png)
+
+## Overview​
+
+The Currency Management system provides:
+
+  * ✅ Complete CRUD operations for currencies
+  * ✅ DataTables with server-side processing
+  * ✅ Modal-based create, edit, and view operations
+  * ✅ Tailwind CSS styling for modern UI
+  * ✅ Proper handling of thousand and decimal separators
+  * ✅ Support for space as thousand separator
+  * ✅ Permission-based access control
+  * ✅ Transaction integration checking
+  * ✅ Multi-language support with translation keys
+  * ✅ Custom middleware for space preservation
+
+
+
+## Table of Contents​
+
+  1. Database Setup
+  2. Model Implementation
+  3. Controller Implementation
+  4. View Templates
+  5. DataTables Integration
+  6. Middleware Configuration
+  7. Routes & Permissions
+  8. Translations
+  9. Testing
+  10. Troubleshooting
+
+
+
+## Database Setup​
+
+The 
+```text
+currencies
+```
+ table should already exist if you're using Ultimate POS. If not, use this migration:
+
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateCurrenciesTable extends Migration
+{
+    public function up()
+    {
+        Schema::create('currencies', function (Blueprint $table) {
+            $table->id();
+            $table->string('country');
+            $table->string('currency');
+            $table->string('code', 10)->unique();
+            $table->string('symbol', 20);
+            $table->string('thousand_separator', 5)->default(',');
+            $table->string('decimal_separator', 5)->default('.');
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('currencies');
+    }
+}
+```
+
+
+### Sample Data​
+
+
+```text
+INSERT INTO currencies (country, currency, code, symbol, thousand_separator, decimal_separator, created_at, updated_at) VALUES
+('United States', 'US Dollar', 'USD', '$', ',', '.', NOW(), NOW()),
+('Germany', 'Euro', 'EUR', '€', '.', ',', NOW(), NOW()),
+('Switzerland', 'Swiss Franc', 'CHF', 'Fr', ' ', '.', NOW(), NOW()),
+('India', 'Indian Rupee', 'INR', '₹', ',', '.', NOW(), NOW());
+```
+
+
+## Model Implementation​
+
+Create the 
+```text
+Currency
+```
+ model at 
+```text
+app/Currency.php
+```
+:
+
+
+```php
+<?php
+
+namespace App;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Currency extends Model
+{
+    /**
+     * Indicates if the model should be timestamped.
+     *
+     * @var bool
+     */
+    public $timestamps = true;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'country',
+        'currency',
+        'code',
+        'symbol',
+        'thousand_separator',
+        'decimal_separator',
+    ];
+
+    /**
+     * Get all transactions for this currency.
+     */
+    public function transactions()
+    {
+        return $this->hasMany(\App\Transaction::class);
+    }
+}
+```
+
+
+### Key Points​
+
+  * **
+```text
+$timestamps = true
+```
+** enables automatic 
+```text
+created_at
+```
+ and 
+```text
+updated_at
+```
+ management
+  * **Fillable array** specifies which fields can be mass-assigned
+  * **Relationship** to transactions for referential integrity
+
+
+
+## Controller Implementation​
+
+Create the 
+```text
+CurrencyController
+```
+ at 
+```text
+app/Http/Controllers/CurrencyController.php
+```
+:
+
+### Index Method (DataTables)​
+
+
+```php
+public function index()
+{
+    if (!auth()->user()->can('currency.view')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    if (request()->ajax()) {
+        $currencies = Currency::select([
+            'country',
+            'currency',
+            'code',
+            'symbol',
+            'thousand_separator',
+            'decimal_separator',
+            'id'
+        ]);
+
+        return datatables()->of($currencies)
+            ->addColumn('action', function ($row) {
+                $html = '<div class="btn-group">';
+                if (auth()->user()->can('currency.view')) {
+                    $html .= '<button class="btn btn-info btn-xs" title="View" onclick="viewCurrency(' . $row->id . ')"><i class="fa fa-eye"></i></button>';
+                }
+                if (auth()->user()->can('currency.edit')) {
+                    $html .= '<button class="btn btn-warning btn-xs edit_currency_button" title="Edit" data-href="' . action([\App\Http\Controllers\CurrencyController::class, 'edit'], [$row->id]) . '"><i class="fa fa-edit"></i></button>';
+                }
+                if (auth()->user()->can('currency.delete')) {
+                    $html .= '<button class="btn btn-danger btn-xs delete_currency_button" title="Delete" data-href="' . action([\App\Http\Controllers\CurrencyController::class, 'destroy'], [$row->id]) . '"><i class="fa fa-trash"></i></button>';
+                }
+                $html .= '</div>';
+                return $html;
+            })
+            ->removeColumn('id')
+            ->rawColumns([6])
+            ->make(false);
+    }
+
+    return view('currency.index');
+}
+```
+
+
+### Store Method (Create)​
+
+
+```php
+public function store(Request $request)
+{
+    if (!auth()->user()->can('currency.create')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    $validatedData = $request->validate([
+        'country' => 'required|max:255',
+        'currency' => 'required|max:255',
+        'code' => 'required|max:10|unique:currencies,code',
+        'symbol' => 'required|max:20',
+        'thousand_separator' => 'nullable|max:5',
+        'decimal_separator' => 'required|max:5',
+    ]);
+
+    try {
+        // Set default value if thousand_separator is not provided, null, or empty string
+        // But allow spaces and other characters to be preserved
+        if (!isset($validatedData['thousand_separator']) ||
+            $validatedData['thousand_separator'] === null ||
+            $validatedData['thousand_separator'] === '') {
+            $validatedData['thousand_separator'] = ',';
+        }
+
+        Currency::create($validatedData);
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'msg' => __('lang_v1.currency_added_success'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('success', __('lang_v1.currency_added_success'));
+    } catch (\Exception $e) {
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('error', __('messages.something_went_wrong'));
+    }
+}
+```
+
+
+### Update Method (Edit)​
+
+
+```php
+public function update(Request $request, Currency $currency)
+{
+    if (!auth()->user()->can('currency.edit')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    $validatedData = $request->validate([
+        'country' => 'required|max:255',
+        'currency' => 'required|max:255',
+        'code' => 'required|max:10|unique:currencies,code,' . $currency->id,
+        'symbol' => 'required|max:20',
+        'thousand_separator' => 'nullable|max:5',
+        'decimal_separator' => 'required|max:5',
+    ]);
+
+    try {
+        // Set default value if thousand_separator is not provided, null, or empty string
+        // But allow spaces and other characters to be preserved
+        if (!isset($validatedData['thousand_separator']) ||
+            $validatedData['thousand_separator'] === null ||
+            $validatedData['thousand_separator'] === '') {
+            $validatedData['thousand_separator'] = ',';
+        }
+
+        $currency->update($validatedData);
+
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'msg' => __('lang_v1.currency_updated_success'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('success', __('lang_v1.currency_updated_success'));
+    } catch (\Exception $e) {
+        if ($request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('error', __('messages.something_went_wrong'));
+    }
+}
+```
+
+
+### Destroy Method (Delete)​
+
+
+```php
+public function destroy(Currency $currency)
+{
+    if (!auth()->user()->can('currency.delete')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    // Check if currency is being used in transactions
+    $transactionCount = DB::table('transactions')->where('currency_id', $currency->id)->count();
+
+    if ($transactionCount > 0) {
+        if (request()->ajax()) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('lang_v1.currency_in_use'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('error', __('lang_v1.currency_in_use'));
+    }
+
+    try {
+        $currency->delete();
+
+        if (request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'msg' => __('lang_v1.currency_deleted_success'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('success', __('lang_v1.currency_deleted_success'));
+    } catch (\Exception $e) {
+        if (request()->ajax()) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong'),
+            ]);
+        }
+
+        return redirect()->route('currencies.index')
+                        ->with('error', __('messages.something_went_wrong'));
+    }
+}
+```
+
+
+### Show Method (View)​
+
+
+```php
+public function show(Currency $currency)
+{
+    if (!auth()->user()->can('currency.view')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    if (request()->ajax()) {
+        return view('currency.show', compact('currency'));
+    }
+
+    return view('currency.show', compact('currency'));
+}
+```
+
+
+### Create & Edit Methods​
+
+
+```php
+public function create()
+{
+    if (!auth()->user()->can('currency.create')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    return view('currency.create');
+}
+
+public function edit(Currency $currency)
+{
+    if (!auth()->user()->can('currency.edit')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    if (request()->ajax()) {
+        return view('currency.edit', compact('currency'));
+    }
+
+    return view('currency.edit', compact('currency'));
+}
+```
+
+
+## View Templates​
+
+### Index View (
+```text
+resources/views/currency/index.blade.php
+```
+)​
+
+
+```javascript
+@extends('layouts.app')
+
+@section('title', __('lang_v1.currencies'))
+
+@section('content')
+
+    <!-- Content Header (Page header) -->
+    <section class="content-header">
+        <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold tw-text-black">@lang('lang_v1.currencies')
+            <small class="tw-text-sm md:tw-text-base tw-text-gray-700 tw-font-semibold">@lang('lang_v1.manage_your_currencies')</small>
+        </h1>
+    </section>
+
+    <!-- Main content -->
+    <section class="content">
+        @component('components.widget', ['class' => 'box-primary', 'title' => __('lang_v1.all_your_currencies')])
+            @can('currency.create')
+                @slot('tool')
+                    <div class="box-tools">
+                        <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full btn-modal"
+                            data-href="{{ action([\App\Http\Controllers\CurrencyController::class, 'create']) }}"
+                            data-container=".currencies_modal">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M12 5l0 14" />
+                                <path d="M5 12l14 0" />
+                            </svg> @lang('messages.add')
+                        </a>
+                    </div>
+                @endslot
+            @endcan
+            @can('currency.view')
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped" id="currencies_table">
+                        <thead>
+                            <tr>
+                                <th>@lang('lang_v1.country')</th>
+                                <th>@lang('lang_v1.currency_name')</th>
+                                <th>@lang('lang_v1.code')</th>
+                                <th>@lang('lang_v1.symbol')</th>
+                                <th>@lang('lang_v1.thousand_separator')</th>
+                                <th>@lang('lang_v1.decimal_separator')</th>
+                                <th>@lang('messages.action')</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            @endcan
+        @endcomponent
+
+        <div class="modal fade currencies_modal" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+        </div>
+
+    </section>
+    <!-- /.content -->
+@endsection
+
+@section('javascript')
+    <script type="text/javascript">
+        // Currencies table
+        var currencies_table = $('#currencies_table').DataTable({
+            processing: true,
+            serverSide: true,
+            fixedHeader:false,
+            ajax: '/currencies',
+            columnDefs: [
+                {
+                    targets: [6],
+                    orderable: false,
+                    searchable: false,
+                },
+            ],
+        });
+
+        // Edit currency
+        $(document).on('click', 'button.edit_currency_button', function() {
+            $('div.currencies_modal').load($(this).data('href'), function() {
+                $(this).modal('show');
+
+                $('form#currency_edit_form').submit(function(e) {
+                    e.preventDefault();
+                    var form = $(this);
+                    var data = form.serialize();
+
+                    $.ajax({
+                        method: 'POST',
+                        url: $(this).attr('action'),
+                        dataType: 'json',
+                        data: data,
+                        beforeSend: function(xhr) {
+                            __disable_submit_button(form.find('button[type="submit"]'));
+                        },
+                        success: function(result) {
+                            if (result.success == true) {
+                                $('div.currencies_modal').modal('hide');
+                                toastr.success(result.msg);
+                                currencies_table.ajax.reload();
+                            } else {
+                                toastr.error(result.msg);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            // Handle validation errors
+                            if (xhr.status === 422) {
+                                var errors = xhr.responseJSON.errors;
+                                var errorMsg = '';
+                                $.each(errors, function(key, value) {
+                                    errorMsg += value[0] + '<br>';
+                                });
+                                toastr.error(errorMsg);
+                            } else {
+                                toastr.error('An error occurred. Please try again.');
+                                console.error('AJAX Error:', error);
+                            }
+                        }
+                    });
+                });
+            });
+        });
+
+        // Delete currency
+        $(document).on('click', 'button.delete_currency_button', function() {
+            swal({
+                title: LANG.sure,
+                text: LANG.confirm_delete_currency,
+                icon: 'warning',
+                buttons: true,
+                dangerMode: true,
+            }).then(willDelete => {
+                if (willDelete) {
+                    var href = $(this).data('href');
+                    var data = $(this).serialize();
+
+                    $.ajax({
+                        method: 'DELETE',
+                        url: href,
+                        dataType: 'json',
+                        data: data,
+                        success: function(result) {
+                            if (result.success == true) {
+                                toastr.success(result.msg);
+                                currencies_table.ajax.reload();
+                            } else {
+                                toastr.error(result.msg);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            toastr.error('An error occurred. Please try again.');
+                            console.error('AJAX Error:', error);
+                        }
+                    });
+                }
+            });
+        });
+
+        // Create currency form submission
+        $(document).on('submit', 'form#currency_add_form', function(e) {
+            e.preventDefault();
+            var form = $(this);
+            var data = form.serialize();
+
+            $.ajax({
+                method: 'POST',
+                url: $(this).attr('action'),
+                dataType: 'json',
+                data: data,
+                beforeSend: function(xhr) {
+                    __disable_submit_button(form.find('button[type="submit"]'));
+                },
+                success: function(result) {
+                    if (result.success == true) {
+                        $('div.currencies_modal').modal('hide');
+                        toastr.success(result.msg);
+                        currencies_table.ajax.reload();
+                    } else {
+                        toastr.error(result.msg);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    // Handle validation errors
+                    if (xhr.status === 422) {
+                        var errors = xhr.responseJSON.errors;
+                        var errorMsg = '';
+                        $.each(errors, function(key, value) {
+                            errorMsg += value[0] + '<br>';
+                        });
+                        toastr.error(errorMsg);
+                    } else {
+                        toastr.error('An error occurred. Please try again.');
+                        console.error('AJAX Error:', error);
+                    }
+                }
+            });
+        });
+
+        // View currency
+        function viewCurrency(id) {
+            $.ajax({
+                url: '/currencies/' + id,
+                dataType: 'html',
+                success: function(result) {
+                    $('div.currencies_modal').html(result).modal('show');
+                },
+            });
+        }
+    </script>
+@endsection
+```
+
+
+### Create View (
+```text
+resources/views/currency/create.blade.php
+```
+)​
+
+
+```javascript
+<div class="modal-dialog" role="document">
+  <div class="modal-content">
+
+    {!! Form::open(['url' => action([\App\Http\Controllers\CurrencyController::class, 'store']), 'method' => 'post', 'id' => 'currency_add_form']) !!}
+
+    <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      <h4 class="modal-title">@lang('lang_v1.add_currency')</h4>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-group">
+        {!! Form::label('country', __('lang_v1.country') . ':*') !!}
+          {!! Form::text('country', null, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.country') ]); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('currency', __('lang_v1.currency_name') . ':*') !!}
+          {!! Form::text('currency', null, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.currency_name') ]); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('code', __('lang_v1.code') . ':*') !!}
+          {!! Form::text('code', null, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.code'), 'maxlength' => '10']); !!}
+        <small class="help-block">@lang('lang_v1.currency_code_help')</small>
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('symbol', __('lang_v1.symbol') . ':*') !!}
+          {!! Form::text('symbol', null, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.symbol'), 'maxlength' => '20']); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('thousand_separator', __('lang_v1.thousand_separator')) !!}
+          {!! Form::text('thousand_separator', ',', ['class' => 'form-control', 'placeholder' => __('lang_v1.thousand_separator'), 'maxlength' => '5']); !!}
+        <small class="help-block">@lang('lang_v1.thousand_separator_help')</small>
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('decimal_separator', __('lang_v1.decimal_separator') . ':*') !!}
+          {!! Form::text('decimal_separator', '.', ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.decimal_separator'), 'maxlength' => '5']); !!}
+        <small class="help-block">@lang('lang_v1.decimal_separator_help')</small>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button type="submit" class="tw-dw-btn tw-dw-btn-primary tw-text-white">@lang('messages.save')</button>
+      <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white" data-dismiss="modal">@lang('messages.close')</button>
+    </div>
+
+    {!! Form::close() !!}
+
+  </div><!-- /.modal-content -->
+</div><!-- /.modal-dialog -->
+```
+
+
+### Edit View (
+```text
+resources/views/currency/edit.blade.php
+```
+)​
+
+
+```javascript
+<div class="modal-dialog" role="document">
+  <div class="modal-content">
+
+    {!! Form::open(['url' => action([\App\Http\Controllers\CurrencyController::class, 'update'], [$currency->id]), 'method' => 'put', 'id' => 'currency_edit_form']) !!}
+
+    <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      <h4 class="modal-title">@lang('lang_v1.edit_currency')</h4>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-group">
+        {!! Form::label('country', __('lang_v1.country') . ':*') !!}
+          {!! Form::text('country', $currency->country, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.country') ]); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('currency', __('lang_v1.currency_name') . ':*') !!}
+          {!! Form::text('currency', $currency->currency, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.currency_name') ]); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('code', __('lang_v1.code') . ':*') !!}
+          {!! Form::text('code', $currency->code, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.code'), 'maxlength' => '10']); !!}
+        <small class="help-block">@lang('lang_v1.currency_code_help')</small>
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('symbol', __('lang_v1.symbol') . ':*') !!}
+          {!! Form::text('symbol', $currency->symbol, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.symbol'), 'maxlength' => '20']); !!}
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('thousand_separator', __('lang_v1.thousand_separator')) !!}
+          {!! Form::text('thousand_separator', $currency->thousand_separator, ['class' => 'form-control', 'placeholder' => __('lang_v1.thousand_separator'), 'maxlength' => '5']); !!}
+        <small class="help-block">@lang('lang_v1.thousand_separator_help')</small>
+      </div>
+
+      <div class="form-group">
+        {!! Form::label('decimal_separator', __('lang_v1.decimal_separator') . ':*') !!}
+          {!! Form::text('decimal_separator', $currency->decimal_separator, ['class' => 'form-control', 'required', 'placeholder' => __('lang_v1.decimal_separator'), 'maxlength' => '5']); !!}
+        <small class="help-block">@lang('lang_v1.decimal_separator_help')</small>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button type="submit" class="tw-dw-btn tw-dw-btn-primary tw-text-white">@lang('messages.save')</button>
+      <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white" data-dismiss="modal">@lang('messages.close')</button>
+    </div>
+
+    {!! Form::close() !!}
+
+  </div><!-- /.modal-content -->
+</div><!-- /.modal-dialog -->
+```
+
+
+### Show View (
+```text
+resources/views/currency/show.blade.php
+```
+)​
+
+
+```text
+<div class="modal-dialog" role="document">
+  <div class="modal-content">
+    <div class="modal-header">
+      <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      <h4 class="modal-title">@lang('lang_v1.currency_details')</h4>
+    </div>
+
+    <div class="modal-body">
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <tr>
+            <th width="30%">@lang('lang_v1.id')</th>
+            <td>{{ $currency->id }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.country')</th>
+            <td>{{ $currency->country }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.currency_name')</th>
+            <td>{{ $currency->currency }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.code')</th>
+            <td>{{ $currency->code }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.symbol')</th>
+            <td>{{ $currency->symbol }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.thousand_separator')</th>
+            <td>{{ $currency->thousand_separator }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.decimal_separator')</th>
+            <td>{{ $currency->decimal_separator }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.created_at')</th>
+            <td>{{ $currency->created_at ? $currency->created_at->format('Y-m-d H:i:s') : 'N/A' }}</td>
+          </tr>
+          <tr>
+            <th>@lang('lang_v1.updated_at')</th>
+            <td>{{ $currency->updated_at ? $currency->updated_at->format('Y-m-d H:i:s') : 'N/A' }}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white" data-dismiss="modal">@lang('messages.close')</button>
+    </div>
+
+  </div><!-- /.modal-content -->
+</div><!-- /.modal-dialog -->
+```
+
+
+## DataTables Integration​
+
+### Key Configuration​
+
+  1. **Server-Side Processing** : Enabled with 
+```text
+serverSide: true
+```
+
+  2. **AJAX Source** : Points to 
+```text
+/currencies
+```
+ endpoint
+  3. **Column Definitions** : Action column (index 6) is not sortable or searchable
+  4. **Raw Columns** : Action column is marked as raw to render HTML
+
+
+
+### Column Mapping​
+
+
+
+<table><thead><tr><th>Index<th>Column<th>Type<th>Sortable<th>Searchable<tbody><tr><td>0<td>Country<td>string<td>✓<td>✓<tr><td>1<td>Currency Name<td>string<td>✓<td>✓<tr><td>2<td>Code<td>string<td>✓<td>✓<tr><td>3<td>Symbol<td>string<td>✓<td>✓<tr><td>4<td>Thousand Separator<td>string<td>✓<td>✓<tr><td>5<td>Decimal Separator<td>string<td>✓<td>✓<tr><td>6<td>Actions<td>HTML<td>✗<td>✗</td></td></td></td></td></tr></td></td></td></td></td></tr></td></td></td></td></td></tr></td></td></td></td></td></tr></td></td></td></td></td></tr></td></td></td></td></td></tr></td></td></td></td></td></tr></tbody></th></th></th></th></th></tr></thead></table>
+
+ 
+
+## Middleware Configuration​
+
+### TrimStrings Middleware​
+
+This is **CRITICAL** for preserving spaces in thousand separators. Update 
+```text
+app/Http/Middleware/TrimStrings.php
+```
+:
+
+
+```text
+<?php
+
+namespace App\Http\Middleware;
+
+use Illuminate\Foundation\Http\Middleware\TrimStrings as BaseTrimmer;
+
+class TrimStrings extends BaseTrimmer
+{
+    /**
+     * The names of the attributes that should not be trimmed.
+     *
+     * @var array
+     */
+    protected $except = [
+        'password',
+        'password_confirmation',
+        'prefix', //Invoice scheme prefix
+        'ref_no_prefixes.purchase', //Business settings prefixes
+        'ref_no_prefixes.purchase_return',
+        'ref_no_prefixes.stock_transfer',
+        'ref_no_prefixes.stock_adjustment',
+        'ref_no_prefixes.sell_return',
+        'ref_no_prefixes.expense',
+        'ref_no_prefixes.contacts',
+        'ref_no_prefixes.purchase_payment',
+        'ref_no_prefixes.sell_payment',
+        'ref_no_prefixes.expense_payment',
+        'ref_no_prefixes.business_location',
+        'ref_no_prefixes.username',
+        'ref_no_prefixes.subscription',
+        'ref_no_prefixes.draft',
+        'thousand_separator', //Don't trim thousand separator (can be space)
+        'decimal_separator', //Don't trim decimal separator (can be space or other chars)
+    ];
+}
+```
+
+
+### Why This Matters​
+
+Laravel's 
+```text
+TrimStrings
+```
+ middleware automatically removes leading and trailing whitespace from all request inputs. Without excluding 
+```text
+thousand_separator
+```
+ and 
+```text
+decimal_separator
+```
+, spaces would be stripped, preventing users from using space as a separator.
+
+## Routes & Permissions​
+
+### Web Routes (
+```text
+routes/web.php
+```
+)​
+
+
+```text
+use App\Http\Controllers\CurrencyController;
+
+// Currency routes
+Route::resource('currencies', CurrencyController::class);
+```
+
+
+### Sidebar Menu Integration​
+
+Add to 
+```text
+app/Http/Middleware/AdminSidebarMenu.php
+```
+:
+
+
+```javascript
+if (auth()->user()->can('currency.view') || auth()->user()->can('currency.create') ||
+    auth()->user()->can('currency.edit') || auth()->user()->can('currency.delete')) {
+    $sub->url(
+        action([\App\Http\Controllers\CurrencyController::class, 'index']),
+        __('lang_v1.currencies'),
+        ['icon' => '', 'active' => request()->segment(1) == 'currencies']
+    );
+}
+```
+
+
+### Required Permissions​
+
+Create these permissions in your permission seeder:
+
+
+```text
+'currency.view',
+'currency.create',
+'currency.edit',
+'currency.delete'
+```
+
+
+Assign to roles as needed (admin, manager, etc.)
+
+## Translations​
+
+Add these keys to 
+```text
+lang/en/lang_v1.php
+```
+:
+
+
+```javascript
+// Currency translations
+'currencies' => 'Currencies',
+'manage_your_currencies' => 'Manage your currencies',
+'all_your_currencies' => 'All your currencies',
+'add_currency' => 'Add Currency',
+'edit_currency' => 'Edit Currency',
+'currency_details' => 'Currency Details',
+'currency_name' => 'Currency Name',
+'currency_code_help' => 'e.g., USD, EUR, GBP',
+'thousand_separator' => 'Thousand Separator',
+'thousand_separator_help' => 'e.g., , (comma), . (dot), space',
+'decimal_separator' => 'Decimal Separator',
+'decimal_separator_help' => 'e.g., . (dot), , (comma)',
+'currency_added_success' => 'Currency added successfully',
+'currency_updated_success' => 'Currency updated successfully',
+'currency_deleted_success' => 'Currency deleted successfully',
+'currency_in_use' => 'Cannot delete currency. It is being used in transactions.',
+```
+
+
+## Testing​
+
+### Test Checklist​
+
+  * Create new currency with space as thousand separator
+  * Create new currency with comma as thousand separator
+  * Edit currency and change to space
+  * Edit currency and change to empty (should default to comma)
+  * View currency details
+  * Delete currency (not in use)
+  * Delete currency (in use - should show error)
+  * Test all permission levels
+  * Verify DataTable sorting and searching
+  * Test form validation (required fields)
+  * Test unique code validation
+
+
+
+### Sample Test Data​
+
+
+```text
+INSERT INTO currencies (country, currency, code, symbol, thousand_separator, decimal_separator, created_at, updated_at) VALUES
+('France', 'Euro', 'EUR', '€', ' ', ',', NOW(), NOW()),
+('USA', 'US Dollar', 'USD', '$', ',', '.', NOW(), NOW()),
+('Germany', 'Euro', 'DEM', '€', '.', ',', NOW(), NOW()),
+('India', 'Indian Rupee', 'INR', '₹', ',', '.', NOW(), NOW()),
+('Switzerland', 'Swiss Franc', 'CHF', 'Fr', ' ', '.', NOW(), NOW());
+```
+
+
+## Troubleshooting​
+
+### Issue: "Processing..." message in DataTable​
+
+**Cause** : Column count mismatch between server response and table headers
+
+**Solution** : Ensure 
+```text
+rawColumns([6])
+```
+ matches 
+```text
+targets: [6]
+```
+ and column count is correct
+
+### Issue: Timestamps show "N/A"​
+
+**Cause** : Model missing 
+```text
+$timestamps = true
+```
+
+
+**Solution** : Add 
+```text
+public $timestamps = true;
+```
+ to Currency model
+
+### Issue: Space separator not saving​
+
+**Cause** : 
+```text
+TrimStrings
+```
+ middleware removing spaces
+
+**Solution** : Add 
+```text
+thousand_separator
+```
+ and 
+```text
+decimal_separator
+```
+ to middleware exclusion list
+
+### Issue: Validation errors not showing​
+
+**Cause** : Missing error callback in AJAX
+
+**Solution** : Add error handler to show validation messages
+
+### Issue: Action buttons not visible​
+
+**Cause** : Column index mismatch
+
+**Solution** : Verify column indexes match between controller and JavaScript
+
+### Issue: Delete button visible for currency in use​
+
+**Cause** : Check for transactions before allowing delete
+
+**Solution** : Verify the destroy method checks transaction count
+
+## Common Currency Formats​
+
+
+
+<table><thead><tr><th>Country<th>Code<th>Symbol<th>Thousand<th>Decimal<th>Example<tbody><tr><td>USA<td>USD<td>$<td>,<td>.<td>$1,234.56<tr><td>UK<td>GBP<td>£<td>,<td>.<td>£1,234.56<tr><td>Germany<td>EUR<td>€<td>.<td>,<td>1.234,56 €<tr><td>France<td>EUR<td>€<td>space<td>,<td>1 234,56 €<tr><td>Switzerland<td>CHF<td>Fr<td>space<td>.<td>1 234.56<tr><td>India<td>INR<td>₹<td>,<td>.<td>₹1,234.56<tr><td>Japan<td>JPY<td>¥<td>,<td>.<td>¥1,234</td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></td></td></td></td></td></td></tr></tbody></th></th></th></th></th></th></tr></thead></table>
+
+ 
+
+## Best Practices​
+
+  1. **Always validate** all inputs on both client and server side
+  2. **Use server-side processing** for DataTables with large datasets
+  3. **Implement proper permissions** for all CRUD operations
+  4. **Check referential integrity** before deleting currencies
+  5. **Preserve spaces** in separator fields using middleware exclusion
+  6. **Use Tailwind CSS** for consistent UI with the rest of the application
+  7. **Add error handling** to all AJAX calls
+  8. **Include translation keys** for multi-language support
+  9. **Follow existing patterns** in the codebase for consistency
+  10. **Test edge cases** like empty fields, spaces, special characters
+
+
+
+## Downloads​
+
+### Complete Package​
+
+Download all files in one convenient package:
+
+[**📦 currency-management-system-all-files.zip (16 KB)**](https://ultimate-pos-tutorials.vercel.app/assets/files/currency-management-system-all-files-220700c7ec6caa7ab10bf132d7886d7a.zip)
+
+This package includes:
+
+  * ✅ All source code files
+  * ✅ Database seeders
+  * ✅ Permission setup
+  * ✅ Complete README with installation instructions
+  * ✅ Sample data for testing
+
+
+
+#### What's Inside:​
+
+
+```text
+currency-management-system-all-files.zip
+├── README.md                           (Installation guide)
+├── app/
+│   ├── Currency.php                    (Model)
+│   └── Http/Controllers/
+│       └── CurrencyController.php      (Controller)
+├── resources/
+│   └── views/
+│       └── currency/
+│           ├── index.blade.php         (DataTable view)
+│           ├── create.blade.php        (Create modal)
+│           ├── edit.blade.php          (Edit modal)
+│           └── show.blade.php          (View modal)
+├── lang/
+│   └── en/
+│       └── currency_translations.php   (Translation keys)
+├── routes/
+│   └── web_currencies_addition.php     (Routes to add)
+├── app/Http/Middleware/
+│   └── TrimStrings_currency_changes.php (Middleware updates)
+├── database/seeds/
+│   ├── CurrencySeeder.php              (Sample currencies)
+│   └── PermissionsSeeder.php           (Setup permissions)
+└── sidebar_menu_addition.php           (Sidebar menu code)
+```
+
+
+#### How to Use:​
+
+  1. Download the zip file
+  2. Extract it to your computer
+  3. Follow the README.md for step-by-step installation
+  4. Run the provided seeders to add sample data
+  5. Configure permissions for your users
+
+
+
+* * *
+
+## Next Steps​
+
+Potential enhancements:
+
+  * Currency conversion rates
+  * Exchange rate API integration
+  * Multi-currency support for transactions
+  * Currency formatting utilities
+  * Localization based on currency
+  * Historical exchange rate tracking
+  * Automated exchange rate updates
+
+
+
+## Support​
+
+For issues or questions:
+
+  1. Check the troubleshooting section
+  2. Review the complete code in the repository
+  3. Test with sample data provided
+  4. Verify all migrations have run successfully
+  5. Check middleware configuration
+
+
+
+* * *
+
+**Last Updated:** October 30, 2025 **Compatible with:** Ultimate POS 6.8.x **Laravel Version:** 9.x
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)

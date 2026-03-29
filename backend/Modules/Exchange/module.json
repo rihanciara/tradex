@@ -1,0 +1,12 @@
+{
+    "name": "Exchange",
+    "alias": "exchange",
+    "description": "Exchange Module for Ultimate POS",
+    "keywords": [],
+    "active": 1,
+    "priority": 0,
+    "providers": ["Modules\\Exchange\\Providers\\ExchangeServiceProvider"],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}

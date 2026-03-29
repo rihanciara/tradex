@@ -1,0 +1,194 @@
+---
+title: "Adding Sub-Category Filter to Product Index"
+sidebar_label: "Adding Sub-Category Filter to Product Index"
+slug: /adding-sub-category-filter-to-product-index-adding-sub-category-filter-to-product-index-ultimate-pos-tutorials-15_07_2025-13-09-41-1
+hide_title: true
+toc: false
+---
+
+# Adding Sub-Category Filter to Product Index in Ultimate POS
+
+In this tutorial, we'll add a dynamic sub-category filter to the product index that automatically populates based on the selected category.
+
+## Prerequisites​
+
+  * Ultimate POS installed and configured
+  * Basic understanding of Laravel and Blade templates
+  * Database access for testing
+
+
+
+## Step 1: Enable Sub-Categories in Business Settings​
+
+**Important first step:** Go to **/business/settings** → Product section and make sure **Sub-Categories are enabled**. Without this, the dropdown will be hidden!
+
+## Step 2: Add Sub-Category Dropdown to the View​
+
+In **resources/views/product/index.blade.php** , find the category filter section and add this code right after the category dropdown:
+
+
+```javascript
+<div
+    class="col-sm-3 @if(!(session('business.enable_category') && session('business.enable_sub_category'))) hide @endif"
+>
+    <div class="form-group">
+        {!! Form::label('sub_category_id', __('product.sub_category') . ':') !!}
+        {!! Form::select('sub_category_id', [], null, ['placeholder' =>
+        __('messages.please_select'), 'class' => 'form-control select2','style'
+        => 'width:100%', 'id' => 'product_list_filter_sub_category_id']); !!}
+    </div>
+</div>
+```
+
+
+## Step 3: Add JavaScript for Dynamic Loading​
+
+In the same file, inside the **@section('javascript')** section, add:
+
+
+```text
+$(document).ready(function () {
+    $(document).on('change', '#product_list_filter_category_id', function () {
+        get_sub_categories();
+    });
+    function get_sub_categories() {
+        var cat = $('#product_list_filter_category_id').val();
+
+        // Clear subcategory selection first
+        $('#product_list_filter_sub_category_id').val('').trigger('change');
+
+        $.ajax({
+            method: 'POST',
+            url: '/products/get_sub_categories',
+            dataType: 'html',
+            data: { cat_id: cat },
+            success: function (result) {
+                if (result) {
+                    $('#product_list_filter_sub_category_id').html(result);
+                    // Trigger change to refresh DataTable
+                    $('#product_list_filter_sub_category_id').trigger('change');
+                }
+            },
+        });
+    }
+});
+```
+
+
+## Step 4: Add Sub-Category to DataTable Ajax Data​
+
+**Important:** In the same file, find the DataTable initialization code and add this line in the **data: function(d)** section:
+
+### For Product Table:​
+
+
+```text
+d.sub_category_id = $('#product_list_filter_sub_category_id').val();
+```
+
+
+Add it after the category_id line:
+
+
+```text
+d.category_id = $('#product_list_filter_category_id').val();
+d.sub_category_id = $('#product_list_filter_sub_category_id').val();
+```
+
+
+### For Stock Report Table:​
+
+
+```text
+d.sub_category_id = $('#product_list_filter_sub_category_id').val();
+```
+
+
+Add it after the category_id line in the stock report DataTable:
+
+
+```text
+d.category_id = $('#product_list_filter_category_id').val();
+d.sub_category_id = $('#product_list_filter_sub_category_id').val();
+```
+
+
+## Step 5: Add Sub-Category Filter to Change Event​
+
+**Important:** Find the change event listener and add **#product_list_filter_sub_category_id** to the selector:
+
+
+```text
+$(document).on(
+    'change',
+    '#product_list_filter_type, #product_list_filter_category_id, #product_list_filter_brand_id, #product_list_filter_unit_id, #product_list_filter_tax_id, #location_id, #active_state, #repair_model_id, #product_list_filter_sub_category_id',
+    function () {
+        if ($('#product_list_tab').hasClass('active')) {
+            product_table.ajax.reload();
+        }
+
+        if ($('#product_stock_report').hasClass('active')) {
+            stock_report_table.ajax.reload();
+        }
+    }
+);
+```
+
+
+## Step 6: Update Controller Logic​
+
+In **app/Http/Controllers/ProductController.php** , in the **index()** method, add this filtering code after the category filter:
+
+
+```text
+$sub_category_id = request()->get('sub_category_id', null);
+if (! empty($sub_category_id)) {
+    $products->where('products.sub_category_id', $sub_category_id);
+}
+```
+
+
+## Testing the Feature​
+
+  1. **Enable sub-categories** in business settings
+  2. **Create test categories** with sub-categories
+  3. **Add products** with different sub-category assignments
+  4. **Test the filtering** \- select a category and verify sub-categories load
+  5. **Verify filtering works** \- select a sub-category and check results
+
+
+
+## Troubleshooting​
+
+**Common Issues:**
+
+  * **Dropdown doesn't appear** : Check if sub-categories are enabled in business settings
+  * **Sub-categories don't load** : Verify the AJAX route 
+```text
+/products/get_sub_categories
+```
+ exists
+  * **Filtering doesn't work** : Ensure the controller filtering code is added correctly
+  * **JavaScript errors** : Check browser console for missing jQuery or syntax errors
+
+
+
+**That's it!** The sub-category dropdown will now populate automatically when a category is selected, and the product list will filter accordingly.
+
+Support This Tutorial
+
+If this guide helped you implement sub-category filtering, consider [buying me a coffee](https://buymeacoffee.com/horizonsoft) to support more tutorials! ☕
+
+💛 Support this project
+
+![Binance ID QR Code](/img/docs/binance-id-qr-code-1.png)
+
+Scan with Binance app
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋

@@ -1,0 +1,230 @@
+<h1>MEGA FIX: Prevent POS Duplicate Invoices &amp; Fix Keyboard Shortcut Dead-Zone</h1>
+
+<p>If your POS system is generating duplicate invoices when cashiers hit keyboard shortcuts (or manually double-click the checkout buttons rapidly), AND if your keyboard shortcuts maliciously refuse to work until you click on the screen first, here is the complete two-part patch to fix everything perfectly.</p>
+
+<hr>
+
+<h2>Part 1: The Duplicate Invoice Fix (<code>pos.js</code>)</h2>
+<p><b>The Problem:</b> The checkout submission buttons in the POS do not have an asynchronous lock. If a cashier holds the <code>F4</code> shortcut down too long, it fires the Javascript <code>click</code> event twice instantly, causing two identical AJAX requests to blast the server before Laravel can respond, resulting in two identical invoices being saved to the database.</p>
+<p><b>The Fix:</b> We add a global Javascript Boolean lock that physically rejects any subsequent checkout attempts while an AJAX request is actively pending.</p>
+
+<p><b>Step 1:</b> Open <code>public/js/pos.js</code>.</p>
+<p><b>Step 2:</b> Find the <code>pos_form_validator</code> initialization around Line 777.</p>
+<p><b>Change from:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>pos_form_validator = pos_form_obj.validate({</code></pre>
+
+<p><b>Change to:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>var pos_is_submitting = false; // Add global lock variable
+pos_form_validator = pos_form_obj.validate({</code></pre>
+
+<p><b>Step 3:</b> Scroll down slightly to around Line 825, inside the submission block.</p>
+<p><b>Change from:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>    if (cnf) {
+        disable_pos_form_actions();
+        var data = $(form).serialize();</code></pre>
+
+<p><b>Change to:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>    if (cnf) {
+        // --- ADD THIS LOCK BLOCK ---
+        if (pos_is_submitting) {
+            return false;
+        }
+        pos_is_submitting = true;
+        // ---------------------------
+        disable_pos_form_actions();
+        var data = $(form).serialize();</code></pre>
+
+<p><b>Step 4:</b> In that same block, add the lock release inside the AJAX success and error handlers:</p>
+<p><b>Change from:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>        $.ajax({
+            method: 'POST',
+            url: url,
+            data: data,
+            dataType: 'json',
+            success: function(result) {
+//... (skip down) ...
+                enable_pos_form_actions();
+            },
+        });</code></pre>
+
+<p><b>Change to:</b></p>
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>        $.ajax({
+            method: 'POST',
+            url: url,
+            data: data,
+            dataType: 'json',
+            success: function(result) {
+                pos_is_submitting = false; // &lt;-- RELEASE LOCK ON SUCCESS
+//... (skip down) ...
+                enable_pos_form_actions();
+            },
+            // --- ADD THIS ENTIRE ERROR BLOCK ---
+            error: function() {
+                pos_is_submitting = false; // &lt;-- RELEASE LOCK ON ERROR
+                enable_pos_form_actions();
+            }
+        });</code></pre>
+
+<p><i>Note: We strongly recommend applying this exact same <code>if (pos_is_submitting)</code> lock pattern to the <code>#pos-draft</code> and <code>#pos-quotation</code> click functions located around Lines 538 and 573.</i></p>
+
+<hr>
+
+<h2>Part 2: The Keyboard Shortcut Dead-Zone Fix (<code>keyboard_shortcuts.blade.php</code>)</h2>
+
+<p><b>The Problem:</b> The POS page automatically places your cursor inside the <code>search_product</code> bar when it opens. The keyboard shortcut library (Mousetrap.js) intentionally ignores all shortcuts if your cursor is inside an input unless the input has the 'mousetrap' HTML class (which is usually removed to prevent barcode scanner issues). This forces cashiers to click the screen just to "wake up" the shortcuts.<br>
+Additionally, the original shortcut code targets <i>both</i> desktop and mobile buttons simultaneously when an F-key is pressed.</p>
+
+<p><b>The Fix:</b> We forcefully override Mousetrap's native behavior to globally listen to the entire DOM. Then, we add <code>.first():visible</code> filtering to ensure the shortcut fires exactly once on the correct element.</p>
+
+<p><b>Step 1:</b> Open <code>resources/views/sale_pos/partials/keyboard_shortcuts.blade.php</code></p>
+<p><b>Step 2:</b> Delete everything inside the file, and replace it completely with this new, patched file contents:</p>
+
+<pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>&lt;script src="{{ asset('plugins/mousetrap/mousetrap.min.js?v=' . $asset_v) }}"&gt;&lt;/script&gt;
+&lt;script type="text/javascript"&gt;
+	// Override Mousetrap's default behavior of ignoring inputs without the "mousetrap" class
+	// This makes shortcuts work globally on the POS, EVEN IF the user's cursor is in a random text box or search bar
+	Mousetrap.prototype.stopCallback = function(e, element, combo) {
+		// Only block shortcuts if the user is typing inside a multi-line TEXTAREA (like suspending a note)
+		if (element.tagName == 'TEXTAREA') {
+			return true;
+		}
+		// Otherwise, NEVER block shortcuts. Always fire them!
+		return false;
+	};
+
+	$(document).ready( function() {
+		//shortcut for express checkout
+		@if(!empty($shortcuts["pos"]["express_checkout"]) &amp;&amp; ($pos_settings['disable_express_checkout'] == 0))
+			Mousetrap.bind('{{$shortcuts["pos"]["express_checkout"]}}', function(e) {
+				e.preventDefault();
+				$('button.pos-express-finalize[data-pay_method="cash"]:visible').first().trigger('click');
+			});
+		@endif
+
+		//shortcut for cancel checkout
+		@if(!empty($shortcuts["pos"]["cancel"]))
+			Mousetrap.bind('{{$shortcuts["pos"]["cancel"]}}', function(e) {
+				e.preventDefault();
+				$('#pos-cancel').trigger('click');
+			});
+		@endif
+
+		//shortcut for draft checkout
+		@if(!empty($shortcuts["pos"]["draft"]) &amp;&amp; ($pos_settings['disable_draft'] == 0))
+			Mousetrap.bind('{{$shortcuts["pos"]["draft"]}}', function(e) {
+				e.preventDefault();
+				$('#pos-draft').trigger('click');
+			});
+		@endif
+
+		//shortcut for draft pay &amp; checkout
+		@if(!empty($shortcuts["pos"]["pay_n_ckeckout"]) &amp;&amp; ($pos_settings['disable_pay_checkout'] == 0))
+			Mousetrap.bind('{{$shortcuts["pos"]["pay_n_ckeckout"]}}', function(e) {
+				e.preventDefault();
+				$('#pos-finalize').trigger('click');
+			});
+		@endif
+
+		//shortcut for edit discount
+		@if(!empty($shortcuts["pos"]["edit_discount"]) &amp;&amp; ($pos_settings['disable_discount'] == 0))
+			Mousetrap.bind('{{$shortcuts["pos"]["edit_discount"]}}', function(e) {
+				e.preventDefault();
+				$('#pos-edit-discount').trigger('click');
+			});
+		@endif
+
+		//shortcut for edit tax
+		@if(!empty($shortcuts["pos"]["edit_order_tax"]) &amp;&amp; ($pos_settings['disable_order_tax'] == 0))
+			Mousetrap.bind('{{$shortcuts["pos"]["edit_order_tax"]}}', function(e) {
+				e.preventDefault();
+				$('#pos-edit-tax').trigger('click');
+			});
+		@endif
+
+		//shortcut for add payment row
+		@if(!empty($shortcuts["pos"]["add_payment_row"]) &amp;&amp; ($pos_settings['disable_pay_checkout'] == 0))
+			var payment_modal = document.querySelector('#modal_payment');
+			Mousetrap.bind('{{$shortcuts["pos"]["add_payment_row"]}}', function(e, combo) {
+				if($('#modal_payment').is(':visible')){
+					e.preventDefault();
+					$('#add-payment-row').trigger('click');
+				}
+			});
+		@endif
+
+		//shortcut for add finalize payment
+		@if(!empty($shortcuts["pos"]["finalize_payment"]) &amp;&amp; ($pos_settings['disable_pay_checkout'] == 0))
+			var payment_modal = document.querySelector('#modal_payment');
+			Mousetrap(payment_modal).bind('{{$shortcuts["pos"]["finalize_payment"]}}', function(e, combo) {
+				if($('#modal_payment').is(':visible')){
+					e.preventDefault();
+					$('#pos-save').trigger('click');
+				}
+			});
+		@endif
+
+		//Shortcuts to go recent product quantity
+		@if(!empty($shortcuts["pos"]["recent_product_quantity"]))
+			shortcut_length_prev = 0;
+			shortcut_position_now = null;
+
+			Mousetrap.bind('{{$shortcuts["pos"]["recent_product_quantity"]}}', function(e, combo) {
+				var length_now = $('table#pos_table tr').length;
+
+				if(length_now != shortcut_length_prev){
+					shortcut_length_prev = length_now;
+					shortcut_position_now = length_now;
+				} else {
+					shortcut_position_now = shortcut_position_now - 1;
+				}
+
+				var last_qty_field = $('table#pos_table tr').eq(shortcut_position_now - 1).contents().find('input.pos_quantity');
+				if(last_qty_field.length &gt;=1){
+					last_qty_field.focus().select();
+				} else {
+					shortcut_position_now = length_now + 1;
+					Mousetrap.trigger('{{$shortcuts["pos"]["recent_product_quantity"]}}');
+				}
+			});
+
+			//On focus of quantity field go back to search when stop typing
+			var timeout = null;
+			$('table#pos_table').on('focus', 'input.pos_quantity', function () {
+			    var that = this;
+
+			    $(this).on('keyup', function(e){
+
+			    	if (timeout !== null) {
+			        	clearTimeout(timeout);
+			    	}
+
+			    	var code = e.keyCode || e.which;
+			    	if (code != '9') {
+    					timeout = setTimeout(function () {
+			        		$('input#search_product').focus().select();
+			    		}, 5000);
+    				}
+			    });
+			});
+		@endif
+
+		//shortcut to go to add new products
+		@if(!empty($shortcuts["pos"]["add_new_product"]))
+			Mousetrap.bind('{{$shortcuts["pos"]["add_new_product"]}}', function(e) {
+				$('input#search_product').focus().select();
+			});
+		@endif
+
+		//shortcut for weighing scale
+		@if(!empty($shortcuts["pos"]["weighing_scale"]))
+			Mousetrap.bind('{{$shortcuts["pos"]["weighing_scale"]}}', function(e) {
+				e.preventDefault();
+				$('button#weighing_scale_btn').trigger('click');
+			});
+		@endif
+	});
+&lt;/script&gt;
+</code></pre>
+
+<p><b>Final Required Action:</b><br>
+Because of Laravel caching, ensure you execute <code>php artisan view:clear</code> via SSH to flush the blade templates, and push <code>CTRL+F5</code> in your browser to hard refresh.</p>

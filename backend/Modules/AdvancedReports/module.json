@@ -1,0 +1,14 @@
+{
+    "name": "AdvancedReports",
+    "alias": "advancedreports",
+    "description": "Comprehensive Advanced Reports Module for Ultimate POS - Features 40+ professional reports including Customer Analytics, Sales Intelligence, Inventory Management, Financial Analysis, and Business Intelligence dashboards",
+    "keywords": ["reports", "analytics", "dashboard", "pos", "business intelligence", "sales analysis", "customer analytics", "inventory reports"],
+    "author": "Horizonsoft Solutions",
+    "active": 1,
+    "order": 0,
+    "priority": 1,
+    "providers": ["Modules\\AdvancedReports\\Providers\\AdvancedReportsServiceProvider"],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}

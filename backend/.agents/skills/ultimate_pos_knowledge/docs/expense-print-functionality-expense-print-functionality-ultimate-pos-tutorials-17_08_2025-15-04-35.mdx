@@ -1,0 +1,2395 @@
+---
+title: "Expense Print Functionality"
+sidebar_label: "Expense Print Functionality"
+slug: /expense-print-functionality-expense-print-functionality-ultimate-pos-tutorials-17_08_2025-15-04-35
+hide_title: true
+toc: false
+---
+
+# Expense Print Functionality - Implementation Guide
+
+## Print Button Interface​
+
+### Print Button with Dropdown Menu​
+
+![Print Button Dropdown](/img/docs/print-button-dropdown-1.png) _Modern print button with dropdown options located next to the Add button in the expenses index page_
+
+## Print Format Examples​
+
+### Summary Print Format​
+
+![Summary Print Format](/img/docs/summary-print-format-2.png) _Clean table layout with summary cards showing totals - perfect for quick overviews_
+
+### Detailed Print Format​
+
+![Detailed Print Format](/img/docs/detailed-print-format-3.png) _Individual expense cards with complete information - ideal for comprehensive records_
+
+### Compact Print Format​
+
+![Compact Print Format](/img/docs/compact-print-format-4.png) _Space-efficient table format fitting maximum data per page - great for bulk printing_
+
+## Overview​
+
+This guide provides step-by-step instructions for implementing the comprehensive expense print functionality that supports multiple print formats (Summary, Detailed, and Compact) with full internationalization support.
+
+## Features​
+
+  * 🖨️ **Multiple Print Formats** : Summary, Detailed, and Compact views
+  * 🌍 **Multi-language Support** : English, Arabic, Spanish, French
+  * 📊 **Filter Integration** : Prints only filtered expenses from the current view
+  * 🎨 **Modern Design** : Professional, print-optimized layouts
+  * 📱 **Responsive** : Works on different screen sizes
+
+
+
+## Prerequisites​
+
+  * Laravel 8.x or higher
+  * Existing expense management system
+  * User authentication system
+  * Permission system (optional but recommended)
+
+
+
+## Implementation Steps​
+
+### Step 1: Update Routes​
+
+Add the print route **before** the resource route to avoid conflicts:
+
+
+```text
+// File: routes/web.php
+//Expenses...
+Route::resource('expenses', ExpenseController::class);
+Route::get('import-expense', [ExpenseController::class, 'importExpense']);
+Route::post('store-import-expense', [ExpenseController::class, 'storeExpenseImport']);
+
+// Use a different URL pattern that won't conflict
+Route::get('expenses-print', [ExpenseController::class, 'printExpenses'])
+    ->name('expenses.print');
+
+// OR use a prefix
+Route::get('reports/expenses/print', [ExpenseController::class, 'printExpenses'])
+    ->name('expenses.print');
+```
+
+
+Route Order
+
+Always place specific routes **before** resource routes to prevent Laravel from interpreting custom endpoints as resource IDs.
+
+### Step 2: Update Expense Index View​
+
+Add the print button with dropdown menu to your expense index page:
+
+
+```javascript
+// File: resources/views/expense/index.blade.php
+@extends('layouts.app')
+@section('title', __('expense.expenses'))
+
+@section('content')
+
+<!-- Content Header (Page header) -->
+<section class="content-header">
+    <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold tw-text-black">@lang('expense.expenses')</h1>
+</section>
+
+<!-- Main content -->
+<section class="content">
+    <div class="row">
+        <div class="col-md-12">
+            @component('components.filters', ['title' => __('report.filters')])
+            @if(auth()->user()->can('all_expense.access'))
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('location_id', __('purchase.business_location') . ':') !!}
+                    {!! Form::select('location_id', $business_locations, null, ['class' => 'form-control select2',
+                    'style' => 'width:100%']); !!}
+                </div>
+            </div>
+
+            <div class="col-sm-3">
+                <div class="form-group">
+                    {!! Form::label('expense_for', __('expense.expense_for').':') !!}
+                    {!! Form::select('expense_for', $users, null, ['class' => 'form-control select2', 'style' =>
+                    'width:100%']); !!}
+                </div>
+            </div>
+
+            <div class="col-sm-3">
+                <div class="form-group">
+                    {!! Form::label('created_by', __('lang_v1.added_by').':') !!}
+                    {!! Form::select('created_by', $users, null, ['class' => 'form-control select2', 'style' =>
+                    'width:100%']); !!}
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('expense_contact_filter', __('contact.contact') . ':') !!}
+                    {!! Form::select('expense_contact_filter', $contacts, null, ['class' => 'form-control select2',
+                    'style' => 'width:100%', 'placeholder' => __('lang_v1.all')]); !!}
+                </div>
+            </div>
+            @endif
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('expense_category_id',__('expense.expense_category').':') !!}
+                    {!! Form::select('expense_category_id', $categories, null, ['placeholder' =>
+                    __('report.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' =>
+                    'expense_category_id']); !!}
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('expense_sub_category_id_filter',__('product.sub_category').':') !!}
+                    {!! Form::select('expense_sub_category_id_filter', $sub_categories, null, ['placeholder' =>
+                    __('report.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' =>
+                    'expense_sub_category_id_filter']); !!}
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('expense_date_range', __('report.date_range') . ':') !!}
+                    {!! Form::text('date_range', null, ['placeholder' => __('lang_v1.select_a_date_range'), 'class' =>
+                    'form-control', 'id' => 'expense_date_range', 'readonly']); !!}
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    {!! Form::label('expense_payment_status', __('purchase.payment_status') . ':') !!}
+                    {!! Form::select('expense_payment_status', ['paid' => __('lang_v1.paid'), 'due' =>
+                    __('lang_v1.due'), 'partial' => __('lang_v1.partial')], null, ['class' => 'form-control select2',
+                    'style' => 'width:100%', 'placeholder' => __('lang_v1.all')]); !!}
+                </div>
+            </div>
+            @endcomponent
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            @component('components.widget', ['class' => 'box-primary', 'title' => __('expense.all_expenses')])
+            @can('expense.add')
+            @slot('tool')
+            <div class="box-tools">
+                <!-- Print Button with Dropdown -->
+                <div class="btn-group pull-right">
+                    <button type="button"
+                        class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right tw-m-2 dropdown-toggle"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="icon icon-tabler icons-tabler-outline icon-tabler-printer">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M17 17h2a2 2 0 0 0 2 -2v-4a2 2 0 0 0 -2 -2h-14a2 2 0 0 0 -2 2v4a2 2 0 0 0 2 2h2" />
+                            <path d="M17 9v-4a2 2 0 0 0 -2 -2h-6a2 2 0 0 0 -2 2v4" />
+                            <path d="M7 13m0 2a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z" />
+                        </svg> @lang('lang_v1.print') <span class="caret"></span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a href="#" id="print_summary_list">
+                                <i class="fa fa-list"></i> @lang('lang_v1.print_summary_list')
+                            </a></li>
+                        <li><a href="#" id="print_detailed_list">
+                                <i class="fa fa-th-list"></i> @lang('lang_v1.print_detailed_list')
+                            </a></li>
+                        <li><a href="#" id="print_compact_list">
+                                <i class="fa fa-compress"></i> @lang('lang_v1.print_compact_list')
+                            </a></li>
+                    </ul>
+                </div>
+                <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right tw-m-2"
+                    href="{{action([\App\Http\Controllers\ExpenseController::class, 'create'])}}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M12 5l0 14" />
+                        <path d="M5 12l14 0" />
+                    </svg> @lang('messages.add')
+                </a>
+
+
+
+                <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right tw-m-2"
+                    href="{{action([\App\Http\Controllers\ExpenseController::class, 'importExpense'])}}">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M12 5l0 14" />
+                        <path d="M5 12l14 0" />
+                    </svg> @lang('expense.import_expense')
+                </a>
+
+
+            </div>
+            @endslot
+            @endcan
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped" id="expense_table">
+                    <thead>
+                        <tr>
+                            <th>@lang('messages.action')</th>
+                            <th>@lang('messages.date')</th>
+                            <th>@lang('purchase.ref_no')</th>
+                            <th>@lang('lang_v1.recur_details')</th>
+                            <th>@lang('expense.expense_category')</th>
+                            <th>@lang('product.sub_category')</th>
+                            <th>@lang('business.location')</th>
+                            <th>@lang('sale.payment_status')</th>
+                            <th>@lang('product.tax')</th>
+                            <th>@lang('sale.total_amount')</th>
+                            <th>@lang('purchase.payment_due')
+                            <th>@lang('expense.expense_for')</th>
+                            <th>@lang('contact.contact')</th>
+                            <th>@lang('expense.expense_note')</th>
+                            <th>@lang('lang_v1.added_by')</th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr class="bg-gray font-17 text-center footer-total">
+                            <td colspan="7"><strong>@lang('sale.total'):</strong></td>
+                            <td class="footer_payment_status_count"></td>
+                            <td></td>
+                            <td class="footer_expense_total"></td>
+                            <td class="footer_total_due"></td>
+                            <td colspan="4"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            @endcomponent
+        </div>
+    </div>
+
+</section>
+<!-- /.content -->
+<!-- /.content -->
+<div class="modal fade payment_modal" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+</div>
+
+<div class="modal fade edit_payment_modal" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+</div>
+@stop
+
+@section('javascript')
+<script src="{{ asset('js/payment.js?v=' . $asset_v) }}"></script>
+<script>
+    $(document).ready(function() {
+    // Function to get current filters
+    function getCurrentFilters() {
+        var filters = {};
+        
+        // Get all filter values
+        if ($('#location_id').val()) filters.location_id = $('#location_id').val();
+        if ($('#expense_for').val()) filters.expense_for = $('#expense_for').val();
+        if ($('#created_by').val()) filters.created_by = $('#created_by').val();
+        if ($('#expense_contact_filter').val()) filters.contact_id = $('#expense_contact_filter').val();
+        if ($('#expense_category_id').val()) filters.expense_category_id = $('#expense_category_id').val();
+        if ($('#expense_sub_category_id_filter').val()) filters.expense_sub_category_id = $('#expense_sub_category_id_filter').val();
+        if ($('#expense_date_range').val()) filters.date_range = $('#expense_date_range').val();
+        if ($('#expense_payment_status').val()) filters.payment_status = $('#expense_payment_status').val();
+        
+        return filters;
+    }
+    
+    // Function to build print URL
+    function buildPrintUrl(type) {
+        var filters = getCurrentFilters();
+        var url = "{{ route('expenses.print') }}?type=" + type;
+        
+        $.each(filters, function(key, value) {
+            url += "&" + key + "=" + encodeURIComponent(value);
+        });
+        
+        return url;
+    }
+    
+    // Print Summary List
+    $('#print_summary_list').click(function(e) {
+        e.preventDefault();
+        var url = buildPrintUrl('summary');
+        window.open(url, '_blank');
+    });
+    
+    // Print Detailed List
+    $('#print_detailed_list').click(function(e) {
+        e.preventDefault();
+        var url = buildPrintUrl('detailed');
+        window.open(url, '_blank');
+    });
+    
+    // Print Compact List
+    $('#print_compact_list').click(function(e) {
+        e.preventDefault();
+        var url = buildPrintUrl('compact');
+        window.open(url, '_blank');
+    });
+});
+</script>
+@endsection
+```
+
+
+### Step 3: Add Controller Method​
+
+Add the 
+```text
+printExpenses
+```
+ method to your ExpenseController:
+
+
+```php
+// File: app/Http/Controllers/ExpenseController.php
+/**
+ * Print expenses with different formats
+ *
+ * @return \Illuminate\Http\Response
+ */
+public function printExpenses(Request $request)
+{
+    if (!auth()->user()->can('all_expense.access') && !auth()->user()->can('view_own_expense')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    $business_id = request()->session()->get('user.business_id');
+    $print_type = $request->get('type', 'summary'); // summary, detailed, compact
+
+    // Build the same query as index method
+    $expenses = Transaction::leftJoin('expense_categories AS ec', 'transactions.expense_category_id', '=', 'ec.id')
+                ->leftJoin('expense_categories AS esc', 'transactions.expense_sub_category_id', '=', 'esc.id')
+                ->join('business_locations AS bl', 'transactions.location_id', '=', 'bl.id')
+                ->leftJoin('tax_rates as tr', 'transactions.tax_id', '=', 'tr.id')
+                ->leftJoin('users AS U', 'transactions.expense_for', '=', 'U.id')
+                ->leftJoin('users AS usr', 'transactions.created_by', '=', 'usr.id')
+                ->leftJoin('contacts AS c', 'transactions.contact_id', '=', 'c.id')
+                ->leftJoin('transaction_payments AS TP', 'transactions.id', '=', 'TP.transaction_id')
+                ->where('transactions.business_id', $business_id)
+                ->whereIn('transactions.type', ['expense', 'expense_refund'])
+                ->select(
+                    'transactions.id',
+                    'transactions.contact_id as c_id',
+                    'transactions.document',
+                    'transaction_date',
+                    'ref_no',
+                    'ec.name as category',
+                    'esc.name as sub_category',
+                    'payment_status',
+                    'additional_notes',
+                    'final_total',
+                    'transactions.is_recurring',
+                    'transactions.recur_interval',
+                    'transactions.recur_interval_type',
+                    'transactions.recur_repetitions',
+                    'transactions.subscription_repeat_on',
+                    'bl.name as location_name',
+                    DB::raw("CONCAT(COALESCE(U.surname, ''),' ',COALESCE(U.first_name, ''),' ',COALESCE(U.last_name,'')) as expense_for"),
+                    DB::raw("CONCAT(tr.name ,' (', tr.amount ,' )') as tax"),
+                    DB::raw('SUM(TP.amount) as amount_paid'),
+                    DB::raw("CONCAT(COALESCE(usr.surname, ''),' ',COALESCE(usr.first_name, ''),' ',COALESCE(usr.last_name,'')) as added_by"),
+                    'transactions.recur_parent_id',
+                    'c.name as contact_name',
+                    'c.contact_id as contact_id',
+                    'c.supplier_business_name as supplier_business_name',
+                    'transactions.type'
+                )
+                ->with(['recurring_parent'])
+                ->groupBy('transactions.id');
+
+    // Apply filters same as index method
+    if ($request->has('expense_for') && !empty($request->get('expense_for'))) {
+        $expenses->where('transactions.expense_for', $request->get('expense_for'));
+    }
+
+    if ($request->has('created_by') && !empty($request->get('created_by'))) {
+        $expenses->where('transactions.created_by', $request->get('created_by'));
+    }
+
+    if ($request->has('contact_id') && !empty($request->get('contact_id'))) {
+        $expenses->where('transactions.contact_id', $request->get('contact_id'));
+    }
+
+    if ($request->has('location_id') && !empty($request->get('location_id'))) {
+        $expenses->where('transactions.location_id', $request->get('location_id'));
+    }
+
+    if ($request->has('expense_category_id') && !empty($request->get('expense_category_id'))) {
+        $expenses->where('transactions.expense_category_id', $request->get('expense_category_id'));
+    }
+
+    if ($request->has('expense_sub_category_id') && !empty($request->get('expense_sub_category_id'))) {
+        $expenses->where('transactions.expense_sub_category_id', $request->get('expense_sub_category_id'));
+    }
+
+    // Date range filter
+    if (!empty($request->get('start_date')) && !empty($request->get('end_date'))) {
+        $start = $request->get('start_date');
+        $end = $request->get('end_date');
+        $expenses->whereDate('transaction_date', '>=', $start)
+                ->whereDate('transaction_date', '<=', $end);
+    }
+
+    // Handle date_range format (if using daterangepicker)
+    if ($request->has('date_range') && !empty($request->get('date_range'))) {
+        $date_range = $request->get('date_range');
+        $dates = explode(' to ', $date_range);
+        if (count($dates) == 2) {
+            $start = \Carbon\Carbon::createFromFormat('m/d/Y', trim($dates[0]))->format('Y-m-d');
+            $end = \Carbon\Carbon::createFromFormat('m/d/Y', trim($dates[1]))->format('Y-m-d');
+            $expenses->whereDate('transaction_date', '>=', $start)
+                    ->whereDate('transaction_date', '<=', $end);
+        }
+    }
+
+    $permitted_locations = auth()->user()->permitted_locations();
+    if ($permitted_locations != 'all') {
+        $expenses->whereIn('transactions.location_id', $permitted_locations);
+    }
+
+    if ($request->has('payment_status') && !empty($request->get('payment_status'))) {
+        $expenses->where('transactions.payment_status', $request->get('payment_status'));
+    }
+
+    $is_admin = $this->moduleUtil->is_admin(auth()->user(), $business_id);
+    if (!$is_admin && !auth()->user()->can('all_expense.access')) {
+        $user_id = auth()->user()->id;
+        $expenses->where(function ($query) use ($user_id) {
+            $query->where('transactions.created_by', $user_id)
+                ->orWhere('transactions.expense_for', $user_id);
+        });
+    }
+
+    // Order by date descending
+    $expenses = $expenses->orderBy('transaction_date', 'desc')->get();
+
+    // Calculate totals
+    $total_expense = $expenses->sum('final_total');
+    $total_paid = $expenses->sum('amount_paid');
+    $total_due = $total_expense - $total_paid;
+
+    // Get business details
+    $business = \App\Business::find($business_id);
+
+    // Get applied filters for display
+    $applied_filters = $this->getAppliedFilters($request, $business_id);
+
+    $print_data = compact(
+        'expenses', 
+        'total_expense', 
+        'total_paid', 
+        'total_due', 
+        'business', 
+        'print_type', 
+        'applied_filters'
+    );
+
+    switch ($print_type) {
+        case 'detailed':
+            return view('expense.print.detailed', $print_data);
+        case 'compact':
+            return view('expense.print.compact', $print_data);
+        default:
+            return view('expense.print.summary', $print_data);
+    }
+}
+
+/**
+ * Get applied filters for display
+ */
+private function getAppliedFilters($request, $business_id)
+{
+    $filters = [];
+
+    if ($request->has('location_id') && !empty($request->get('location_id'))) {
+        $location = \App\BusinessLocation::find($request->get('location_id'));
+        if ($location) {
+            $filters['Location'] = $location->name;
+        }
+    }
+
+    if ($request->has('expense_for') && !empty($request->get('expense_for'))) {
+        $user = \App\User::find($request->get('expense_for'));
+        if ($user) {
+            $filters['Expense For'] = $user->first_name . ' ' . $user->last_name;
+        }
+    }
+
+    if ($request->has('expense_category_id') && !empty($request->get('expense_category_id'))) {
+        $category = \App\ExpenseCategory::find($request->get('expense_category_id'));
+        if ($category) {
+            $filters['Category'] = $category->name;
+        }
+    }
+
+    if ($request->has('payment_status') && !empty($request->get('payment_status'))) {
+        $filters['Payment Status'] = ucfirst($request->get('payment_status'));
+    }
+
+    if ($request->has('date_range') && !empty($request->get('date_range'))) {
+        $filters['Date Range'] = $request->get('date_range');
+    }
+
+    return $filters;
+}
+```
+
+
+### Step 4: Create Print Templates Directory​
+
+Create the following directory structure:
+
+
+```text
+resources/views/expense/print/
+├── summary.blade.php
+├── detailed.blade.php
+└── compact.blade.php
+```
+
+
+### Step 5: Summary Print Template​
+
+Create the summary print template:
+
+
+```javascript
+// File: resources/views/expense/print/summary.blade.php
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@lang('lang_v1.expenses_summary_report') - {{ $business->name }}</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #2c3e50;
+            padding-bottom: 20px;
+        }
+
+        .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .report-title {
+            font-size: 20px;
+            color: #34495e;
+            margin-bottom: 10px;
+        }
+
+        .report-date {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        .filters-section {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        .filters-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .filter-item {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 3px;
+            font-size: 12px;
+        }
+
+        .summary-cards {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            gap: 15px;
+        }
+
+        .summary-card {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .summary-card.total {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .summary-card.paid {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .summary-card.due {
+            background: linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%);
+        }
+
+        .card-title {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-amount {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .expenses-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .expenses-table th {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 15px 10px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .expenses-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #ecf0f1;
+            vertical-align: top;
+        }
+
+        .expenses-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .expenses-table tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        .amount {
+            font-weight: bold;
+            text-align: right;
+        }
+
+        .positive-amount {
+            color: #27ae60;
+        }
+
+        .negative-amount {
+            color: #e74c3c;
+        }
+
+        .status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status.paid {
+            background: #d5f4e6;
+            color: #27ae60;
+        }
+
+        .status.due {
+            background: #ffeaa7;
+            color: #e17055;
+        }
+
+        .status.partial {
+            background: #ddd6fe;
+            color: #8b5cf6;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        .print-info {
+            margin-top: 15px;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                padding: 15px;
+            }
+
+            .summary-cards {
+                display: block;
+            }
+
+            .summary-card {
+                display: inline-block;
+                width: 30%;
+                margin: 5px;
+                break-inside: avoid;
+            }
+
+            .expenses-table {
+                font-size: 11px;
+            }
+
+            .expenses-table th,
+            .expenses-table td {
+                padding: 8px 5px;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="company-name">{{ $business->name ?? 'Company Name' }}</div>
+        <div class="report-title">@lang('lang_v1.expenses_summary_report')</div>
+        <div class="report-date">@lang('lang_v1.generated_on') {{ date('F j, Y \a\t g:i A') }}</div>
+    </div>
+
+    @if(!empty($applied_filters))
+    <div class="filters-section">
+        <div class="filters-title">@lang('lang_v1.applied_filters'):</div>
+        @foreach($applied_filters as $filter_name => $filter_value)
+        <span class="filter-item">{{ $filter_name }}: {{ $filter_value }}</span>
+        @endforeach
+    </div>
+    @endif
+
+    <div class="summary-cards">
+        <div class="summary-card total">
+            <div class="card-title">@lang('lang_v1.total_expenses')</div>
+            <div class="card-amount">{{ number_format($total_expense, 2) }}</div>
+        </div>
+        <div class="summary-card paid">
+            <div class="card-title">@lang('lang_v1.total_paid')</div>
+            <div class="card-amount">{{ number_format($total_paid, 2) }}</div>
+        </div>
+        <div class="summary-card due">
+            <div class="card-title">@lang('lang_v1.total_due')</div>
+            <div class="card-amount">{{ number_format($total_due, 2) }}</div>
+        </div>
+    </div>
+
+    @if($expenses->count() > 0)
+    <table class="expenses-table">
+        <thead>
+            <tr>
+                <th>@lang('messages.date')</th>
+                <th>@lang('lang_v1.reference')</th>
+                <th>@lang('lang_v1.category')</th>
+                <th>@lang('lang_v1.location')</th>
+                <th>@lang('lang_v1.contact')</th>
+                <th>@lang('lang_v1.payment_status')</th>
+                <th>@lang('lang_v1.amount')</th>
+                <th>@lang('lang_v1.paid')</th>
+                <th>@lang('lang_v1.due')</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($expenses as $expense)
+            <tr>
+                <td>{{ \Carbon\Carbon::parse($expense->transaction_date)->format('M j, Y') }}</td>
+                <td>
+                    {{ $expense->ref_no }}
+                    @if($expense->type == 'expense_refund')
+                    <small style="color: #e74c3c;">(@lang('lang_v1.refund'))</small>
+                    @endif
+                </td>
+                <td>
+                    {{ $expense->category ?? __('lang_v1.n_a') }}
+                    @if($expense->sub_category)
+                    <br><small style="color: #7f8c8d;">{{ $expense->sub_category }}</small>
+                    @endif
+                </td>
+                <td>{{ $expense->location_name }}</td>
+                <td>
+                    @if($expense->contact_name)
+                    {{ $expense->contact_name }}
+                    @if($expense->contact_id)
+                    <br><small style="color: #7f8c8d;">({{ $expense->contact_id }})</small>
+                    @endif
+                    @else
+                    @lang('lang_v1.n_a')
+                    @endif
+                </td>
+                <td>
+                    <span class="status {{ $expense->payment_status }}">
+                        @lang('lang_v1.' . $expense->payment_status)
+                    </span>
+                </td>
+                <td class="amount {{ $expense->type == 'expense_refund' ? 'negative-amount' : 'positive-amount' }}">
+                    @if($expense->type == 'expense_refund') - @endif
+                    {{ number_format($expense->final_total, 2) }}
+                </td>
+                <td class="amount">{{ number_format($expense->amount_paid ?? 0, 2) }}</td>
+                <td class="amount">
+                    @php
+                    $due = $expense->final_total - ($expense->amount_paid ?? 0);
+                    if($expense->type == 'expense_refund') $due = -1 * $due;
+                    @endphp
+                    {{ number_format($due, 2) }}
+                </td>
+            </tr>
+            @endforeach
+        </tbody>
+        <tfoot>
+            <tr style="background: #2c3e50; color: white; font-weight: bold;">
+                <td colspan="6" style="text-align: right; padding: 15px;">@lang('lang_v1.totals'):</td>
+                <td class="amount">{{ number_format($total_expense, 2) }}</td>
+                <td class="amount">{{ number_format($total_paid, 2) }}</td>
+                <td class="amount">{{ number_format($total_due, 2) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    @else
+    <div class="no-data">
+        <h3>@lang('lang_v1.no_expenses_found')</h3>
+        <p>@lang('lang_v1.no_expenses_match_criteria')</p>
+    </div>
+    @endif
+
+    <div class="footer">
+        <div>{{ $business->name ?? 'Company Name' }} - @lang('lang_v1.expenses_summary_report')</div>
+        <div class="print-info">
+            @lang('lang_v1.report_contains') {{ $expenses->count() }} @lang('lang_v1.expenses') |
+            @lang('lang_v1.printed_by'): {{ auth()->user()->first_name }} {{ auth()->user()->last_name }} |
+            @lang('lang_v1.print_date'): {{ date('F j, Y \a\t g:i A') }}
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            window.print();
+        }
+    </script>
+</body>
+
+</html>
+```
+
+
+### Step 6: Detailed Print Template​
+
+Create the detailed print template:
+
+
+```javascript
+// File: resources/views/expense/print/detailed.blade.php
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Detailed Expenses Report - {{ $business->name }}</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #2c3e50;
+            padding-bottom: 20px;
+        }
+
+        .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .report-title {
+            font-size: 20px;
+            color: #34495e;
+            margin-bottom: 10px;
+        }
+
+        .report-date {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        .filters-section {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+
+        .filters-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .filter-item {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 3px;
+            font-size: 12px;
+        }
+
+        .summary-cards {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            gap: 15px;
+        }
+
+        .summary-card {
+            flex: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .summary-card.total {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .summary-card.paid {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .summary-card.due {
+            background: linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%);
+        }
+
+        .card-title {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-amount {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .expense-item {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            page-break-inside: avoid;
+        }
+
+        .expense-header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .expense-ref {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .expense-date {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .expense-body {
+            padding: 20px;
+        }
+
+        .expense-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .detail-group {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            color: #34495e;
+            font-size: 14px;
+        }
+
+        .expense-amounts {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #bdc3c7;
+        }
+
+        .amount-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px 0;
+        }
+
+        .amount-row.total {
+            border-top: 2px solid #2c3e50;
+            padding-top: 10px;
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .amount-label {
+            color: #2c3e50;
+        }
+
+        .amount-value {
+            font-weight: bold;
+            color: #27ae60;
+        }
+
+        .amount-value.negative {
+            color: #e74c3c;
+        }
+
+        .status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status.paid {
+            background: #d5f4e6;
+            color: #27ae60;
+        }
+
+        .status.due {
+            background: #ffeaa7;
+            color: #e17055;
+        }
+
+        .status.partial {
+            background: #ddd6fe;
+            color: #8b5cf6;
+        }
+
+        .notes-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .notes-title {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 8px;
+        }
+
+        .notes-content {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        .print-info {
+            margin-top: 15px;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                padding: 10px;
+                font-size: 12px;
+            }
+
+            .summary-cards {
+                display: block;
+            }
+
+            .summary-card {
+                display: inline-block;
+                width: 30%;
+                margin: 5px;
+                break-inside: avoid;
+            }
+
+            .expense-details {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            .detail-group {
+                padding: 10px;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="company-name">{{ $business->name ?? 'Company Name' }}</div>
+        <div class="report-title">Detailed Expenses Report</div>
+        <div class="report-date">Generated on {{ date('F j, Y \a\t g:i A') }}</div>
+    </div>
+
+    @if(!empty($applied_filters))
+    <div class="filters-section">
+        <div class="filters-title">Applied Filters:</div>
+        @foreach($applied_filters as $filter_name => $filter_value)
+        <span class="filter-item">{{ $filter_name }}: {{ $filter_value }}</span>
+        @endforeach
+    </div>
+    @endif
+
+    <div class="summary-cards">
+        <div class="summary-card total">
+            <div class="card-title">Total Expenses</div>
+            <div class="card-amount">{{ number_format($total_expense, 2) }}</div>
+        </div>
+        <div class="summary-card paid">
+            <div class="card-title">Total Paid</div>
+            <div class="card-amount">{{ number_format($total_paid, 2) }}</div>
+        </div>
+        <div class="summary-card due">
+            <div class="card-title">Total Due</div>
+            <div class="card-amount">{{ number_format($total_due, 2) }}</div>
+        </div>
+    </div>
+
+    @if($expenses->count() > 0)
+    @foreach($expenses as $expense)
+    <div class="expense-item">
+        <div class="expense-header">
+            <div>
+                <div class="expense-ref">
+                    {{ $expense->ref_no }}
+                    @if($expense->type == 'expense_refund')
+                    <small
+                        style="background: #e74c3c; padding: 3px 8px; border-radius: 10px; font-size: 11px; margin-left: 10px;">REFUND</small>
+                    @endif
+                </div>
+            </div>
+            <div class="expense-date">
+                {{ \Carbon\Carbon::parse($expense->transaction_date)->format('F j, Y') }}
+            </div>
+        </div>
+
+        <div class="expense-body">
+            <div class="expense-details">
+                <div class="detail-group">
+                    <div class="detail-label">Category</div>
+                    <div class="detail-value">
+                        {{ $expense->category ?? 'N/A' }}
+                        @if($expense->sub_category)
+                        <br><small style="color: #7f8c8d;">{{ $expense->sub_category }}</small>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Location</div>
+                    <div class="detail-value">{{ $expense->location_name }}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Contact</div>
+                    <div class="detail-value">
+                        @if($expense->contact_name)
+                        {{ $expense->contact_name }}
+                        @if($expense->contact_id)
+                        <br><small>({{ $expense->contact_id }})</small>
+                        @endif
+                        @if($expense->supplier_business_name)
+                        <br><small>{{ $expense->supplier_business_name }}</small>
+                        @endif
+                        @else
+                        N/A
+                        @endif
+                    </div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Expense For</div>
+                    <div class="detail-value">{{ $expense->expense_for ?: 'N/A' }}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Added By</div>
+                    <div class="detail-value">{{ $expense->added_by ?: 'N/A' }}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Payment Status</div>
+                    <div class="detail-value">
+                        <span class="status {{ $expense->payment_status }}">
+                            {{ ucfirst($expense->payment_status) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="expense-amounts">
+                <div class="amount-row">
+                    <span class="amount-label">Total Amount:</span>
+                    <span class="amount-value {{ $expense->type == 'expense_refund' ? 'negative' : '' }}">
+                        @if($expense->type == 'expense_refund') - @endif
+                        {{ number_format($expense->final_total, 2) }}
+                    </span>
+                </div>
+                <div class="amount-row">
+                    <span class="amount-label">Amount Paid:</span>
+                    <span class="amount-value">{{ number_format($expense->amount_paid ?? 0, 2) }}</span>
+                </div>
+                <div class="amount-row total">
+                    <span class="amount-label">Amount Due:</span>
+                    <span class="amount-value">
+                        @php
+                        $due = $expense->final_total - ($expense->amount_paid ?? 0);
+                        if($expense->type == 'expense_refund') $due = -1 * $due;
+                        @endphp
+                        {{ number_format($due, 2) }}
+                    </span>
+                </div>
+                @if($expense->tax)
+                <div class="amount-row">
+                    <span class="amount-label">Tax:</span>
+                    <span class="amount-value">{{ $expense->tax }}</span>
+                </div>
+                @endif
+            </div>
+
+            @if($expense->additional_notes)
+            <div class="notes-section">
+                <div class="notes-title">Notes:</div>
+                <div class="notes-content">{{ $expense->additional_notes }}</div>
+            </div>
+            @endif
+        </div>
+    </div>
+    @endforeach
+    @else
+    <div class="no-data">
+        <h3>No expenses found</h3>
+        <p>No expenses match the selected criteria.</p>
+    </div>
+    @endif
+
+    <div class="footer">
+        <div>{{ $business->name ?? 'Company Name' }} - Detailed Expenses Report</div>
+        <div class="print-info">
+            Report contains {{ $expenses->count() }} expense(s) |
+            Printed by: {{ auth()->user()->first_name }} {{ auth()->user()->last_name }} |
+            Print Date: {{ date('F j, Y \a\t g:i A') }}
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            window.print();
+        }
+    </script>
+</body>
+
+</html>
+```
+
+
+### Step 7: Compact Print Template​
+
+Create the compact print template:
+
+
+```javascript
+// File: resources/views/expense/print/compact.blade.php
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Compact Expenses Report - {{ $business->name }}</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 15px;
+            font-size: 12px;
+            line-height: 1.3;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 15px;
+        }
+
+        .company-name {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .report-title {
+            font-size: 16px;
+            color: #34495e;
+            margin-bottom: 8px;
+        }
+
+        .report-date {
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        .filters-section {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 11px;
+        }
+
+        .filters-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .filter-item {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            margin: 2px;
+            font-size: 10px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            background: #2c3e50;
+            color: white;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .summary-item {
+            text-align: center;
+            flex: 1;
+        }
+
+        .summary-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+            opacity: 0.8;
+        }
+
+        .summary-amount {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .expenses-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 11px;
+        }
+
+        .expenses-table th {
+            background: #34495e;
+            color: white;
+            padding: 8px 5px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .expenses-table td {
+            padding: 6px 5px;
+            border-bottom: 1px solid #ecf0f1;
+            vertical-align: top;
+        }
+
+        .expenses-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .expenses-table tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        .amount {
+            font-weight: bold;
+            text-align: right;
+        }
+
+        .positive-amount {
+            color: #27ae60;
+        }
+
+        .negative-amount {
+            color: #e74c3c;
+        }
+
+        .status {
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status.paid {
+            background: #d5f4e6;
+            color: #27ae60;
+        }
+
+        .status.due {
+            background: #ffeaa7;
+            color: #e17055;
+        }
+
+        .status.partial {
+            background: #ddd6fe;
+            color: #8b5cf6;
+        }
+
+        .ref-no {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .category {
+            font-weight: 500;
+        }
+
+        .subcategory {
+            color: #7f8c8d;
+            font-size: 10px;
+            font-style: italic;
+        }
+
+        .contact-info {
+            line-height: 1.2;
+        }
+
+        .contact-id {
+            color: #7f8c8d;
+            font-size: 10px;
+        }
+
+        .footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 10px;
+        }
+
+        .print-info {
+            margin-top: 10px;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                padding: 10px;
+                font-size: 10px;
+            }
+
+            .expenses-table th,
+            .expenses-table td {
+                padding: 4px 3px;
+            }
+
+            .summary-row {
+                padding: 8px 10px;
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 30px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="company-name">{{ $business->name ?? 'Company Name' }}</div>
+        <div class="report-title">Compact Expenses Report</div>
+        <div class="report-date">Generated on {{ date('F j, Y \a\t g:i A') }}</div>
+    </div>
+
+    @if(!empty($applied_filters))
+    <div class="filters-section">
+        <div class="filters-title">Applied Filters:</div>
+        @foreach($applied_filters as $filter_name => $filter_value)
+        <span class="filter-item">{{ $filter_name }}: {{ $filter_value }}</span>
+        @endforeach
+    </div>
+    @endif
+
+    <div class="summary-row">
+        <div class="summary-item">
+            <div class="summary-label">Total Expenses</div>
+            <div class="summary-amount">{{ number_format($total_expense, 2) }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Paid</div>
+            <div class="summary-amount">{{ number_format($total_paid, 2) }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Due</div>
+            <div class="summary-amount">{{ number_format($total_due, 2) }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Count</div>
+            <div class="summary-amount">{{ $expenses->count() }}</div>
+        </div>
+    </div>
+
+    @if($expenses->count() > 0)
+    <table class="expenses-table">
+        <thead>
+            <tr>
+                <th style="width: 8%;">Date</th>
+                <th style="width: 10%;">Ref#</th>
+                <th style="width: 12%;">Category</th>
+                <th style="width: 10%;">Location</th>
+                <th style="width: 12%;">Contact</th>
+                <th style="width: 8%;">Status</th>
+                <th style="width: 8%;">Amount</th>
+                <th style="width: 8%;">Paid</th>
+                <th style="width: 8%;">Due</th>
+                <th style="width: 8%;">For</th>
+                <th style="width: 8%;">By</th>
+            </tr>
+        </thead>
+        <tbody>
+            @php $page_count = 0; @endphp
+            @foreach($expenses as $expense)
+            @php $page_count++; @endphp
+            @if($page_count > 35 && !$loop->last)
+        </tbody>
+    </table>
+    <div class="page-break"></div>
+    <table class="expenses-table">
+        <thead>
+            <tr>
+                <th style="width: 8%;">Date</th>
+                <th style="width: 10%;">Ref#</th>
+                <th style="width: 12%;">Category</th>
+                <th style="width: 10%;">Location</th>
+                <th style="width: 12%;">Contact</th>
+                <th style="width: 8%;">Status</th>
+                <th style="width: 8%;">Amount</th>
+                <th style="width: 8%;">Paid</th>
+                <th style="width: 8%;">Due</th>
+                <th style="width: 8%;">For</th>
+                <th style="width: 8%;">By</th>
+            </tr>
+        </thead>
+        <tbody>
+            @php $page_count = 1; @endphp
+            @endif
+            <tr>
+                <td>{{ \Carbon\Carbon::parse($expense->transaction_date)->format('m/d/y') }}</td>
+                <td>
+                    <span class="ref-no">{{ $expense->ref_no }}</span>
+                    @if($expense->type == 'expense_refund')
+                    <br><small style="color: #e74c3c; font-size: 8px;">(REF)</small>
+                    @endif
+                </td>
+                <td>
+                    <span class="category">{{ Str::limit($expense->category ?? 'N/A', 15) }}</span>
+                    @if($expense->sub_category)
+                    <br><span class="subcategory">{{ Str::limit($expense->sub_category, 12) }}</span>
+                    @endif
+                </td>
+                <td>{{ Str::limit($expense->location_name, 12) }}</td>
+                <td>
+                    @if($expense->contact_name)
+                    <div class="contact-info">
+                        {{ Str::limit($expense->contact_name, 15) }}
+                        @if($expense->contact_id)
+                        <br><span class="contact-id">({{ $expense->contact_id }})</span>
+                        @endif
+                    </div>
+                    @else
+                    N/A
+                    @endif
+                </td>
+                <td>
+                    <span class="status {{ $expense->payment_status }}">
+                        {{ substr(ucfirst($expense->payment_status), 0, 4) }}
+                    </span>
+                </td>
+                <td class="amount {{ $expense->type == 'expense_refund' ? 'negative-amount' : 'positive-amount' }}">
+                    @if($expense->type == 'expense_refund') - @endif
+                    {{ number_format($expense->final_total, 2) }}
+                </td>
+                <td class="amount">{{ number_format($expense->amount_paid ?? 0, 2) }}</td>
+                <td class="amount">
+                    @php
+                    $due = $expense->final_total - ($expense->amount_paid ?? 0);
+                    if($expense->type == 'expense_refund') $due = -1 * $due;
+                    @endphp
+                    {{ number_format($due, 2) }}
+                </td>
+                <td>{{ Str::limit($expense->expense_for ?: 'N/A', 10) }}</td>
+                <td>{{ Str::limit($expense->added_by ?: 'N/A', 10) }}</td>
+            </tr>
+            @endforeach
+        </tbody>
+        <tfoot>
+            <tr style="background: #2c3e50; color: white; font-weight: bold; font-size: 11px;">
+                <td colspan="6" style="text-align: right; padding: 8px;">TOTALS:</td>
+                <td class="amount">{{ number_format($total_expense, 2) }}</td>
+                <td class="amount">{{ number_format($total_paid, 2) }}</td>
+                <td class="amount">{{ number_format($total_due, 2) }}</td>
+                <td colspan="2"></td>
+            </tr>
+        </tfoot>
+    </table>
+    @else
+    <div class="no-data">
+        <h3>No expenses found</h3>
+        <p>No expenses match the selected criteria.</p>
+    </div>
+    @endif
+
+    <div class="footer">
+        <div>{{ $business->name ?? 'Company Name' }} - Compact Expenses Report</div>
+        <div class="print-info">
+            Report contains {{ $expenses->count() }} expense(s) |
+            Printed by: {{ auth()->user()->first_name }} {{ auth()->user()->last_name }} |
+            Print Date: {{ date('F j, Y \a\t g:i A') }}
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            window.print();
+        }
+    </script>
+</body>
+
+</html>
+```
+
+
+### Step 8: Add Translations​
+
+Add translation keys to your language files:
+
+#### English Translations​
+
+
+```javascript
+<?php
+// Add these translations to your resources/lang/en/lang_v1.php file
+
+return [
+    // ... existing translations ...
+    
+    // Print functionality
+    'print' => 'Print',
+    'print_summary_list' => 'Print Summary List',
+    'print_detailed_list' => 'Print Detailed List',
+    'print_compact_list' => 'Print Compact List',
+    
+    // Report titles
+    'expenses_summary_report' => 'Expenses Summary Report',
+    'expenses_detailed_report' => 'Detailed Expenses Report',
+    'expenses_compact_report' => 'Compact Expenses Report',
+    
+    // Report sections
+    'generated_on' => 'Generated on',
+    'applied_filters' => 'Applied Filters',
+    'total_expenses' => 'Total Expenses',
+    'total_paid' => 'Total Paid',
+    'total_due' => 'Total Due',
+    'expense_count' => 'Expense Count',
+    'no_expenses_found' => 'No expenses found',
+    'no_expenses_match_criteria' => 'No expenses match the selected criteria',
+    
+    // Table headers
+    'reference' => 'Reference',
+    'category' => 'Category',
+    'sub_category' => 'Sub Category',
+    'location' => 'Location',
+    'contact' => 'Contact',
+    'payment_status' => 'Payment Status',
+    'amount' => 'Amount',
+    'paid' => 'Paid',
+    'due' => 'Due',
+    'expense_for' => 'Expense For',
+    'added_by' => 'Added By',
+    'notes' => 'Notes',
+    'tax' => 'Tax',
+    
+    // Status labels
+    'paid' => 'Paid',
+    'due' => 'Due',
+    'partial' => 'Partial',
+    
+    // Detail labels
+    'expense_details' => 'Expense Details',
+    'payment_information' => 'Payment Information',
+    'total_amount' => 'Total Amount',
+    'amount_paid' => 'Amount Paid',
+    'amount_due' => 'Amount Due',
+    'tax_information' => 'Tax Information',
+    'additional_notes' => 'Additional Notes',
+    
+    // Footer information
+    'report_contains' => 'Report contains',
+    'expenses' => 'expense(s)',
+    'printed_by' => 'Printed by',
+    'print_date' => 'Print Date',
+    
+    // Misc
+    'refund' => 'Refund',
+    'recurring_expense' => 'Recurring Expense',
+    'generated_recurring_expense' => 'Generated Recurring Expense',
+    'totals' => 'TOTALS',
+    'n_a' => 'N/A',
+];
+```
+
+
+#### Arabic Translations​
+
+
+```javascript
+<?php
+// Add these translations to your resources/lang/ar/lang_v1.php file
+
+return [
+    // ... existing translations ...
+    
+    // Print functionality
+    'print' => 'طباعة',
+    'print_summary_list' => 'طباعة قائمة ملخصة',
+    'print_detailed_list' => 'طباعة قائمة مفصلة',
+    'print_compact_list' => 'طباعة قائمة مضغوطة',
+    
+    // Report titles
+    'expenses_summary_report' => 'تقرير ملخص المصروفات',
+    'expenses_detailed_report' => 'تقرير المصروفات المفصل',
+    'expenses_compact_report' => 'تقرير المصروفات المضغوط',
+    
+    // Report sections
+    'generated_on' => 'تم إنشاؤه في',
+    'applied_filters' => 'المرشحات المطبقة',
+    'total_expenses' => 'إجمالي المصروفات',
+    'total_paid' => 'إجمالي المدفوع',
+    'total_due' => 'إجمالي المستحق',
+    'expense_count' => 'عدد المصروفات',
+    'no_expenses_found' => 'لم يتم العثور على مصروفات',
+    'no_expenses_match_criteria' => 'لا توجد مصروفات تطابق المعايير المحددة',
+    
+    // Table headers
+    'reference' => 'المرجع',
+    'category' => 'الفئة',
+    'sub_category' => 'الفئة الفرعية',
+    'location' => 'الموقع',
+    'contact' => 'جهة الاتصال',
+    'payment_status' => 'حالة الدفع',
+    'amount' => 'المبلغ',
+    'paid' => 'مدفوع',
+    'due' => 'مستحق',
+    'expense_for' => 'مصروف لـ',
+    'added_by' => 'أضيف بواسطة',
+    'notes' => 'ملاحظات',
+    'tax' => 'ضريبة',
+    
+    // Status labels
+    'paid' => 'مدفوع',
+    'due' => 'مستحق',
+    'partial' => 'جزئي',
+    
+    // Detail labels
+    'expense_details' => 'تفاصيل المصروف',
+    'payment_information' => 'معلومات الدفع',
+    'total_amount' => 'إجمالي المبلغ',
+    'amount_paid' => 'المبلغ المدفوع',
+    'amount_due' => 'المبلغ المستحق',
+    'tax_information' => 'معلومات الضريبة',
+    'additional_notes' => 'ملاحظات إضافية',
+    
+    // Footer information
+    'report_contains' => 'يحتوي التقرير على',
+    'expenses' => 'مصروف/مصروفات',
+    'printed_by' => 'طبع بواسطة',
+    'print_date' => 'تاريخ الطباعة',
+    
+    // Misc
+    'refund' => 'استرداد',
+    'recurring_expense' => 'مصروف متكرر',
+    'generated_recurring_expense' => 'مصروف متكرر مُولد',
+    'totals' => 'الإجماليات',
+    'n_a' => 'غير متاح',
+];
+```
+
+
+#### Spanish Translations​
+
+
+```javascript
+<?php
+// Add these translations to your resources/lang/es/lang_v1.php file
+
+return [
+    // ... existing translations ...
+    
+    // Print functionality
+    'print' => 'Imprimir',
+    'print_summary_list' => 'Imprimir Lista Resumen',
+    'print_detailed_list' => 'Imprimir Lista Detallada',
+    'print_compact_list' => 'Imprimir Lista Compacta',
+    
+    // Report titles
+    'expenses_summary_report' => 'Informe Resumen de Gastos',
+    'expenses_detailed_report' => 'Informe Detallado de Gastos',
+    'expenses_compact_report' => 'Informe Compacto de Gastos',
+    
+    // Report sections
+    'generated_on' => 'Generado el',
+    'applied_filters' => 'Filtros Aplicados',
+    'total_expenses' => 'Total de Gastos',
+    'total_paid' => 'Total Pagado',
+    'total_due' => 'Total Pendiente',
+    'expense_count' => 'Cantidad de Gastos',
+    'no_expenses_found' => 'No se encontraron gastos',
+    'no_expenses_match_criteria' => 'Ningún gasto coincide con los criterios seleccionados',
+    
+    // Table headers
+    'reference' => 'Referencia',
+    'category' => 'Categoría',
+    'sub_category' => 'Subcategoría',
+    'location' => 'Ubicación',
+    'contact' => 'Contacto',
+    'payment_status' => 'Estado de Pago',
+    'amount' => 'Monto',
+    'paid' => 'Pagado',
+    'due' => 'Pendiente',
+    'expense_for' => 'Gasto Para',
+    'added_by' => 'Agregado Por',
+    'notes' => 'Notas',
+    'tax' => 'Impuesto',
+    
+    // Status labels
+    'paid' => 'Pagado',
+    'due' => 'Pendiente',
+    'partial' => 'Parcial',
+    
+    // Detail labels
+    'expense_details' => 'Detalles del Gasto',
+    'payment_information' => 'Información de Pago',
+    'total_amount' => 'Monto Total',
+    'amount_paid' => 'Monto Pagado',
+    'amount_due' => 'Monto Pendiente',
+    'tax_information' => 'Información de Impuestos',
+    'additional_notes' => 'Notas Adicionales',
+    
+    // Footer information
+    'report_contains' => 'El informe contiene',
+    'expenses' => 'gasto(s)',
+    'printed_by' => 'Impreso por',
+    'print_date' => 'Fecha de Impresión',
+    
+    // Misc
+    'refund' => 'Reembolso',
+    'recurring_expense' => 'Gasto Recurrente',
+    'generated_recurring_expense' => 'Gasto Recurrente Generado',
+    'totals' => 'TOTALES',
+    'n_a' => 'N/A',
+];
+```
+
+
+#### French Translations​
+
+
+```javascript
+<?php
+// Add these translations to your resources/lang/fr/lang_v1.php file
+
+return [
+    // ... existing translations ...
+    
+    // Print functionality
+    'print' => 'Imprimer',
+    'print_summary_list' => 'Imprimer Liste Résumée',
+    'print_detailed_list' => 'Imprimer Liste Détaillée',
+    'print_compact_list' => 'Imprimer Liste Compacte',
+    
+    // Report titles
+    'expenses_summary_report' => 'Rapport Résumé des Dépenses',
+    'expenses_detailed_report' => 'Rapport Détaillé des Dépenses',
+    'expenses_compact_report' => 'Rapport Compact des Dépenses',
+    
+    // Report sections
+    'generated_on' => 'Généré le',
+    'applied_filters' => 'Filtres Appliqués',
+    'total_expenses' => 'Total des Dépenses',
+    'total_paid' => 'Total Payé',
+    'total_due' => 'Total Dû',
+    'expense_count' => 'Nombre de Dépenses',
+    'no_expenses_found' => 'Aucune dépense trouvée',
+    'no_expenses_match_criteria' => 'Aucune dépense ne correspond aux critères sélectionnés',
+    
+    // Table headers
+    'reference' => 'Référence',
+    'category' => 'Catégorie',
+    'sub_category' => 'Sous-catégorie',
+    'location' => 'Emplacement',
+    'contact' => 'Contact',
+    'payment_status' => 'Statut de Paiement',
+    'amount' => 'Montant',
+    'paid' => 'Payé',
+    'due' => 'Dû',
+    'expense_for' => 'Dépense Pour',
+    'added_by' => 'Ajouté Par',
+    'notes' => 'Notes',
+    'tax' => 'Taxe',
+    
+    // Status labels
+    'paid' => 'Payé',
+    'due' => 'Dû',
+    'partial' => 'Partiel',
+    
+    // Detail labels
+    'expense_details' => 'Détails de la Dépense',
+    'payment_information' => 'Informations de Paiement',
+    'total_amount' => 'Montant Total',
+    'amount_paid' => 'Montant Payé',
+    'amount_due' => 'Montant Dû',
+    'tax_information' => 'Informations Fiscales',
+    'additional_notes' => 'Notes Supplémentaires',
+    
+    // Footer information
+    'report_contains' => 'Le rapport contient',
+    'expenses' => 'dépense(s)',
+    'printed_by' => 'Imprimé par',
+    'print_date' => 'Date d\'Impression',
+    
+    // Misc
+    'refund' => 'Remboursement',
+    'recurring_expense' => 'Dépense Récurrente',
+    'generated_recurring_expense' => 'Dépense Récurrente Générée',
+    'totals' => 'TOTAUX',
+    'n_a' => 'N/A',
+];
+```
+
+
+## Configuration​
+
+### Permissions​
+
+Ensure users have appropriate permissions to access the print functionality:
+
+
+```text
+// In your permission seeder or configuration
+```
+
+
+### Styling Customization​
+
+The print templates include comprehensive CSS. You can customize:
+
+  * **Colors** : Modify gradient backgrounds and theme colors
+  * **Fonts** : Change font families and sizes
+  * **Layout** : Adjust spacing and card layouts
+  * **Print Settings** : Optimize for different paper sizes
+
+
+
+## Usage​
+
+### Basic Usage​
+
+  1. Navigate to the Expenses page
+  2. Apply any desired filters
+  3. Click the "Print" dropdown button
+  4. Select your preferred format: 
+     * **Summary** : Overview table with totals
+     * **Detailed** : Individual expense cards with complete information
+     * **Compact** : Space-efficient table format
+
+
+
+### Filter Integration​
+
+The print functionality automatically captures and applies:
+
+  * Date ranges
+  * Location filters
+  * Category filters
+  * Payment status filters
+  * User filters
+  * Contact filters
+
+
+
+### Print Formats Explained​
+
+
+
+<table><thead><tr><th>Format<th>Best For<th>Features<tbody><tr><td><strong>Summary</strong><td>Quick overviews<td>Table format, summary cards, essential info<tr><td><strong>Detailed</strong><td>Complete records<td>Individual cards, all details, notes<tr><td><strong>Compact</strong><td>Space efficiency<td>Minimal layout, maximum data per page</td></td></td></tr></td></td></td></tr></td></td></td></tr></tbody></th></th></th></tr></thead></table>
+
+ 
+
+## Troubleshooting​
+
+### Common Issues​
+
+#### Blank Page on Print​
+
+  * **Cause** : Route conflicts with resource routes
+  * **Solution** : Ensure print route is defined before resource route
+
+
+
+#### Missing Translations​
+
+  * **Cause** : Translation keys not added to language files
+  * **Solution** : Add all required keys to 
+```text
+lang_v1.php
+```
+ files
+
+
+
+#### Permission Denied​
+
+  * **Cause** : User lacks required permissions
+  * **Solution** : Ensure user has 
+```text
+expense.view
+```
+ or 
+```text
+all_expense.access
+```
+ permissions
+
+
+
+#### Styling Issues​
+
+  * **Cause** : CSS conflicts or missing styles
+  * **Solution** : Check for CSS conflicts and ensure all styles are included
+
+
+
+## Customization​
+
+### Adding New Print Formats​
+
+  1. Create new template file in 
+```text
+resources/views/expense/print/
+```
+
+  2. Add new option to dropdown in index view
+  3. Update JavaScript to handle new format
+  4. Add case in controller method
+
+
+
+### Custom Styling​
+
+Override default styles by:
+
+  1. Creating custom CSS file
+  2. Including in print templates
+  3. Using 
+```text
+@media print
+```
+ for print-specific styles
+
+
+
+## Best Practices​
+
+### Performance​
+
+  * Use database indexes on filtered columns
+  * Implement pagination for large datasets
+  * Cache frequently accessed data
+
+
+
+### Security​
+
+  * Validate user permissions
+  * Sanitize input parameters
+  * Implement rate limiting for print requests
+
+
+
+### Accessibility​
+
+  * Use semantic HTML in templates
+  * Ensure sufficient color contrast
+  * Provide keyboard navigation support
+
+
+
+### Maintenance​
+
+  * Regular testing of print layouts
+  * Monitor performance metrics
+  * Keep translations updated
+
+
+
+## API Reference​
+
+### Route Parameters​
+
+
+
+<table><thead><tr><th>Parameter<th>Type<th>Description<th>Example<tbody><tr><td><code>type</code><td>string<td>Print format type<td><code>summary</code>, <code>detailed</code>, <code>compact</code><tr><td><code>location_id</code><td>integer<td>Filter by location<td><code>1</code><tr><td><code>expense_category_id</code><td>integer<td>Filter by category<td><code>5</code><tr><td><code>date_range</code><td>string<td>Date range filter<td><code>01/01/2025 - 12/31/2025</code><tr><td><code>payment_status</code><td>string<td>Payment status filter<td><code>paid</code>, <code>due</code>, <code>partial</code></td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></td></td></td></td></tr></tbody></th></th></th></th></tr></thead></table>
+
+ 
+
+### Controller Methods​
+
+#### 
+```php
+printExpenses(Request $request)
+```
+​
+
+Main print method that handles all print formats.
+
+**Parameters:**
+
+  * 
+```php
+$request
+```
+: HTTP request with filters and format type
+
+
+
+**Returns:**
+
+  * Rendered print view
+
+
+
+#### 
+```php
+getAppliedFilters($request, $business_id)
+```
+​
+
+Helper method to extract and format applied filters.
+
+**Parameters:**
+
+  * 
+```php
+$request
+```
+: HTTP request object
+  * 
+```text
+$business_id
+```
+: Current business ID
+
+
+
+**Returns:**
+
+  * Array of applied filters
+
+
+
+## Examples​
+
+### Basic Print URL​
+
+
+```text
+/expenses/print?type=summary
+```
+
+
+### Print with Filters​
+
+
+```text
+/expenses/print?type=detailed&location_id=1&payment_status=due&date_range=01/01/2025 - 12/31/2025
+```
+
+
+### JavaScript Implementation​
+
+
+```text
+// Example of calling print functionality
+function printExpenses(type) {
+    const filters = getCurrentFilters();
+    const url = buildPrintUrl(type);
+    window.open(url, '_blank');
+}
+```
+
+
+## Support​
+
+For additional support or customization requests:
+
+  1. Check the troubleshooting section
+  2. Review Laravel logs for errors
+  3. Verify route configurations
+  4. Test with debug mode enabled
+
+
+
+## Changelog​
+
+### Version 1.0.0​
+
+  * Initial implementation
+  * Three print formats
+  * Multi-language support
+  * Filter integration
+  * Modern responsive design
+
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋

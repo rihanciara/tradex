@@ -1,0 +1,296 @@
+---
+title: "Product History in POS"
+sidebar_label: "Product History in POS"
+slug: /product-history-in-pos-product-history-in-pos-ultimate-pos-tutorials-11_28_2025-11-22-10-pm
+hide_title: true
+toc: false
+---
+
+# Product History Button in POS Screen
+
+Add a **Product History** button to the POS header that opens a modal to search products by SKU or name and view their complete history including sales, purchases, stock movements, warranty, and expiry information.
+
+![Product History in POS](/img/docs/product-history-in-pos-1.png)
+
+## Download​
+
+  * [Download ZIP](https://ultimate-pos-tutorials.vercel.app/assets/files/product-history-pos-4a139943ddb99efc5f0cc1a83d3b4475.zip)
+
+
+
+## Features​
+
+  * Search by **SKU** or **Product Name** (partial match supported)
+  * Search by **Variation SKU** (sub_sku)
+  * **5 History Tabs:**
+    * **Sales History** \- Invoice, date, customer, qty, price, subtotal, location
+    * **Purchase History** \- Ref no, date, supplier, qty, price, subtotal, location
+    * **Stock History** \- Date, transaction type, ref, location, qty in/out, balance
+    * **Warranty Info** \- Invoice, date, customer, warranty details, status (Active/Expired)
+    * **Expiry Info** \- Lot number, expiry date, location, stock, days to expiry, status
+  * **Pagination** \- 8 records per page with navigation controls
+  * **Bilingual Support** \- English and Arabic translations
+  * **Permission-Based Access** \- Each tab respects user permissions
+
+
+
+## Permissions​
+
+The feature includes permission-based access control for each data section:
+
+
+
+<table><thead><tr><th>Section<th>Required Permission<tbody><tr><td><strong>Base Access</strong><td><code>product.view</code><tr><td><strong>Sales History</strong><td><code>sell.view</code> or <code>direct_sell.view</code><tr><td><strong>Purchase History</strong><td><code>purchase.view</code><tr><td><strong>Stock History</strong><td><code>product.view</code><tr><td><strong>Warranty Info</strong><td><code>sell.view</code> or <code>direct_sell.view</code><tr><td><strong>Expiry Info</strong><td><code>purchase.view</code></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></tbody></th></th></tr></thead></table>
+
+ 
+
+Users will only see data for tabs they have permission to access. If a user doesn't have the required permission, the tab will show empty data.
+
+## Files to Modify/Create​
+
+
+
+<table><thead><tr><th>File<th>Action<tbody><tr><td><code>resources/views/layouts/partials/header-pos.blade.php</code><td>Modify<tr><td><code>resources/views/sale_pos/partials/product_history_modal.blade.php</code><td>Create<tr><td><code>resources/views/sale_pos/create.blade.php</code><td>Modify<tr><td><code>resources/views/sale_pos/edit.blade.php</code><td>Modify<tr><td><code>app/Http/Controllers/SellPosController.php</code><td>Modify<tr><td><code>routes/web.php</code><td>Modify<tr><td><code>public/js/pos.js</code><td>Modify<tr><td><code>lang/en/lang_v1.php</code><td>Modify<tr><td><code>lang/ar/lang_v1.php</code><td>Modify</td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></td></td></tr></tbody></th></th></tr></thead></table>
+
+ 
+
+## Installation Steps​
+
+### Step 1: Add Button to POS Header​
+
+Edit 
+```text
+resources/views/layouts/partials/header-pos.blade.php
+```
+
+
+Find the calculator button and add the product history button after it:
+
+
+```text
+<button type="button" id="product_history_btn" title="{{ __('lang_v1.product_history') }}"
+    class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white hover:tw-bg-white/60 tw-cursor-pointer tw-border-2 tw-flex tw-items-center tw-justify-center tw-rounded-md md:tw-w-8 tw-w-auto tw-h-8 tw-text-gray-600 pull-right"
+    data-toggle="modal" data-target="#product_history_modal">
+    <strong class="!tw-m-3">
+        <i class="fas fa-history fa-lg tw-text-[#9333EA] !tw-text-sm" aria-hidden="true"></i>
+        <span class="tw-inline md:tw-hidden">{{ __('lang_v1.product_history') }}</span>
+    </strong>
+</button>
+```
+
+
+### Step 2: Create Modal View​
+
+Create new file 
+```text
+resources/views/sale_pos/partials/product_history_modal.blade.php
+```
+
+
+Copy the content from: [product_history_modal.blade.php](https://ultimate-pos-tutorials.vercel.app/assets/files/product_history_modal.blade-4505e31b29c85f3a87f93e0765aa0cae.php)
+
+### Step 3: Include Modal in POS Pages​
+
+Edit 
+```text
+resources/views/sale_pos/create.blade.php
+```
+
+
+Find 
+```text
+@include('sale_pos.partials.weighing_scale_modal')
+```
+ and add after it:
+
+
+```text
+@include('sale_pos.partials.product_history_modal')
+```
+
+
+Edit 
+```text
+resources/views/sale_pos/edit.blade.php
+```
+
+
+Add the same include after 
+```text
+@include('sale_pos.partials.weighing_scale_modal')
+```
+:
+
+
+```text
+@include('sale_pos.partials.product_history_modal')
+```
+
+
+### Step 4: Add Controller Method​
+
+Edit 
+```text
+app/Http/Controllers/SellPosController.php
+```
+
+
+Add the 
+```text
+getProductHistory
+```
+ method before the closing brace of the class.
+
+Copy the content from: [SellPosController_getProductHistory.php](https://ultimate-pos-tutorials.vercel.app/assets/files/SellPosController_getProductHistory-4c9a75c30963a5141fcd3d9c4dcb30fc.php)
+
+### Step 5: Add Route​
+
+Edit 
+```text
+routes/web.php
+```
+
+
+Find the line:
+
+
+```text
+Route::get('/sells/pos/get-featured-products/{location_id}', [SellPosController::class, 'getFeaturedProducts']);
+```
+
+
+Add after it:
+
+
+```text
+Route::get('/sells/pos/get-product-history', [SellPosController::class, 'getProductHistory']);
+```
+
+
+### Step 6: Add JavaScript​
+
+Edit 
+```text
+public/js/pos.js
+```
+
+
+Add the JavaScript code at the end of the file.
+
+Copy the content from: [pos_product_history.js](https://ultimate-pos-tutorials.vercel.app/assets/files/pos_product_history-832c4722dc39986bcdef719bb8843123.js)
+
+### Step 7: Add Translations​
+
+Edit 
+```text
+lang/en/lang_v1.php
+```
+ and 
+```text
+lang/ar/lang_v1.php
+```
+
+
+Add the translations before the closing 
+```text
+];
+```
+
+
+Copy the content from: [lang_v1_translations.php](https://ultimate-pos-tutorials.vercel.app/assets/files/lang_v1_translations-e918e8fdd4e1bb49eefd017c89e7eada.php)
+
+## Usage​
+
+  1. Go to POS screen
+  2. Click the purple **history icon** button in the header
+  3. Enter product SKU or name in the search box
+  4. Press **Enter** or click **Search**
+  5. View history across all tabs (Sales, Purchases, Stock, Warranty, Expiry)
+  6. Use pagination controls to navigate through records
+
+
+
+## Screenshots​
+
+### Button Location​
+
+The button appears in the POS header with a purple history icon.
+
+### Modal View​
+
+  * Product info displayed at top (image, name, SKU, current stock)
+  * 5 tabs for different history types
+  * Pagination at bottom of each table
+
+
+
+## Customization​
+
+### Change Records Per Page​
+
+Edit 
+```text
+SellPosController.php
+```
+ line with 
+```text
+$per_page = 8;
+```
+ to change the number of records per page.
+
+### Change Button Color​
+
+Edit the button class in 
+```text
+header-pos.blade.php
+```
+:
+
+  * Current: 
+```text
+tw-text-[#9333EA]
+```
+ (purple)
+  * Change to any Tailwind color class
+
+
+
+## Troubleshooting​
+
+### Modal Not Opening​
+
+  * Check if the modal include is added to both 
+```text
+create.blade.php
+```
+ and 
+```text
+edit.blade.php
+```
+
+  * Clear browser cache and refresh
+
+
+
+### No Data Showing​
+
+  * Verify the route is added correctly
+  * Check browser console for JavaScript errors
+  * Verify controller method is added
+
+
+
+### Translations Not Working​
+
+  * Clear Laravel cache: 
+```text
+php artisan cache:clear
+```
+
+  * Check translation keys match exactly
+
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)

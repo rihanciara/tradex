@@ -1,0 +1,626 @@
+---
+title: "Commission Agent in the sells list"
+sidebar_label: "Commission Agent in the sells list"
+slug: /commission-agent-in-the-sells-list-commission-agent-in-the-sells-list-ultimate-pos-tutorials-17_08_2025-15-05-59
+hide_title: true
+toc: false
+---
+
+# Commission Agent Implementation Guide
+
+![Commission Agent](/img/docs/commission-agent-1.png)
+
+This guide walks you through implementing a commission agent column and filter in the sells list DataTable.
+
+## Overview​
+
+We'll add:
+
+  * Commission agent filter dropdown
+  * Commission agent column in the DataTable
+  * Backend logic to handle commission agent data
+
+
+
+## Step 1: Update the Controller (SellController.php)​
+
+### 1.1 Update Commission Agent Logic in 
+```text
+index()
+```
+ Method​
+
+Since the filter partial expects 
+```text
+$is_cmsn_agent_enabled
+```
+ and 
+```text
+$commission_agents
+```
+, update your controller:
+
+
+```php
+public function index()
+{
+    // ... existing code ...
+    
+    $business_id = request()->session()->get('user.business_id');
+    
+    // Update this section to match the partial expectations
+    $business_details = $this->businessUtil->getDetails($business_id);
+    $is_cmsn_agent_enabled = !empty($business_details->sales_cmsn_agnt);
+    $commission_agents = [];
+    
+    if ($is_cmsn_agent_enabled) {
+        $commsn_agnt_setting = $business_details->sales_cmsn_agnt;
+        
+        if ($commsn_agnt_setting == 'user') {
+            $commission_agents = User::forDropdown($business_id);
+        } elseif ($commsn_agnt_setting == 'cmsn_agnt') {
+            $commission_agents = User::saleCommissionAgentsDropdown($business_id);
+        }
+    }
+
+    // ... rest of existing code ...
+}
+```
+
+
+### 1.2 Add Commission Agent Filter in AJAX Section​
+
+In the AJAX section where filters are applied, add:
+
+
+```text
+if (request()->ajax()) {
+    // ... existing filters ...
+    
+    // Add commission agent filter
+    if (!empty(request()->input('sales_cmsn_agnt'))) {
+        $sells->where('transactions.commission_agent', request()->input('sales_cmsn_agnt'));
+    }
+    
+    // ... rest of the AJAX logic ...
+}
+```
+
+
+### 1.3 Add Commission Agent to DataTable Columns​
+
+In the DataTable configuration, add the commission agent column:
+
+
+```text
+$datatable = Datatables::of($sells)
+    // ... existing columns ...
+    ->addColumn('commission_agent_name', function ($row) {
+        return $row->commission_agent_name ?? '';
+    })
+    // ... rest of columns ...
+```
+
+
+### 1.4 Update the Return Statement​
+
+
+```text
+return view('sell.index')
+    ->with(compact(
+        'business_locations', 
+        'customers', 
+        'is_woocommerce', 
+        'sales_representative', 
+        'is_cmsn_agent_enabled',  // This variable is expected by the partial
+        'commission_agents',      // This too
+        'service_staffs', 
+        'is_tables_enabled', 
+        'is_service_staff_enabled', 
+        'is_types_service_enabled', 
+        'shipping_statuses', 
+        'sources', 
+        'payment_types'
+    ));
+```
+
+
+## Step 2: Update the Query to Include Commission Agent Data​
+
+### 2.1 Modify the 
+```text
+getListSells()
+```
+ Method​
+
+In your 
+```text
+TransactionUtil
+```
+ class, add the commission agent join and select to the existing query:
+
+
+```php
+public function getListSells($business_id, $sale_type = 'sell')
+{
+    $sells = Transaction::leftJoin('contacts', 'transactions.contact_id', '=', 'contacts.id')
+        // ->leftJoin('transaction_payments as tp', 'transactions.id', '=', 'tp.transaction_id')
+        ->leftJoin('transaction_sell_lines as tsl', function ($join) {
+            $join->on('transactions.id', '=', 'tsl.transaction_id')
+                ->whereNull('tsl.parent_sell_line_id');
+        })
+        ->leftJoin('users as u', 'transactions.created_by', '=', 'u.id')
+        ->leftJoin('users as ss', 'transactions.res_waiter_id', '=', 'ss.id')
+        ->leftJoin('users as dp', 'transactions.delivery_person', '=', 'dp.id')
+        // ADD THIS LINE: Join with commission agent
+        ->leftJoin('users as ca', 'transactions.commission_agent', '=', 'ca.id')
+        ->leftJoin('res_tables as tables', 'transactions.res_table_id', '=', 'tables.id')
+        ->join(
+            'business_locations AS bl',
+            'transactions.location_id',
+            '=',
+            'bl.id'
+        )
+        ->leftJoin(
+            'transactions AS SR',
+            'transactions.id',
+            '=',
+            'SR.return_parent_id'
+        )
+        ->leftJoin(
+            'types_of_services AS tos',
+            'transactions.types_of_service_id',
+            '=',
+            'tos.id'
+        )
+        ->where('transactions.business_id', $business_id)
+        ->where('transactions.type', $sale_type)
+        ->select(
+            'transactions.id',
+            'transactions.transaction_date',
+            'transactions.type',
+            'transactions.is_direct_sale',
+            'transactions.invoice_no',
+            'transactions.invoice_no as invoice_no_text',
+            'contacts.name',
+            'contacts.mobile',
+            'contacts.contact_id',
+            'contacts.supplier_business_name',
+            'transactions.status',
+            'transactions.payment_status',
+            'transactions.final_total',
+            'transactions.tax_amount',
+            'transactions.discount_amount',
+            'transactions.discount_type',
+            'transactions.total_before_tax',
+            'transactions.rp_redeemed',
+            'transactions.rp_redeemed_amount',
+            'transactions.rp_earned',
+            'transactions.types_of_service_id',
+            'transactions.shipping_status',
+            'transactions.pay_term_number',
+            'transactions.pay_term_type',
+            'transactions.additional_notes',
+            'transactions.staff_note',
+            'transactions.shipping_details',
+            'transactions.document',
+            'transactions.shipping_custom_field_1',
+            'transactions.shipping_custom_field_2',
+            'transactions.shipping_custom_field_3',
+            'transactions.shipping_custom_field_4',
+            'transactions.shipping_custom_field_5',
+            'transactions.custom_field_1',
+            'transactions.custom_field_2',
+            'transactions.custom_field_3',
+            'transactions.custom_field_4',
+            DB::raw('DATE_FORMAT(transactions.transaction_date, "%Y/%m/%d") as sale_date'),
+            DB::raw("CONCAT(COALESCE(u.surname, ''),' ',COALESCE(u.first_name, ''),' ',COALESCE(u.last_name,'')) as added_by"),
+            DB::raw('(SELECT SUM(IF(TP.is_return = 1,-1*TP.amount,TP.amount)) FROM transaction_payments AS TP WHERE
+                    TP.transaction_id=transactions.id) as total_paid'),
+            'bl.name as business_location',
+            DB::raw('COUNT(SR.id) as return_exists'),
+            DB::raw('(SELECT SUM(TP2.amount) FROM transaction_payments AS TP2 WHERE
+                    TP2.transaction_id=SR.id ) as return_paid'),
+            DB::raw('COALESCE(SR.final_total, 0) as amount_return'),
+            'SR.id as return_transaction_id',
+            'tos.name as types_of_service_name',
+            'transactions.service_custom_field_1',
+            DB::raw('COUNT( DISTINCT tsl.id) as total_items'),
+            DB::raw("CONCAT(COALESCE(ss.surname, ''),' ',COALESCE(ss.first_name, ''),' ',COALESCE(ss.last_name,'')) as waiter"),
+            'tables.name as table_name',
+            DB::raw('SUM(tsl.quantity - tsl.so_quantity_invoiced) as so_qty_remaining'),
+            'transactions.is_export',
+            DB::raw("CONCAT(COALESCE(dp.surname, ''),' ',COALESCE(dp.first_name, ''),' ',COALESCE(dp.last_name,'')) as delivery_person"),
+            // ADD THIS LINE: Select commission agent name
+            DB::raw("CONCAT(COALESCE(ca.surname, ''),' ',COALESCE(ca.first_name, ''),' ',COALESCE(ca.last_name,'')) as commission_agent_name")
+        );
+
+    if ($sale_type == 'sell') {
+        $sells->where('transactions.status', 'final');
+    }
+
+    return $sells;
+}
+```
+
+
+**Key Changes:**
+
+  1. Added 
+```text
+->leftJoin('users as ca', 'transactions.commission_agent', '=', 'ca.id')
+```
+ after the other user joins
+  2. Added commission agent name to the select statement at the end
+
+
+
+
+```javascript
+
+## Step 3: Update the Blade Template (sell/index.blade.php)
+
+### 3.1 Commission Agent Filter (Already Implemented)
+
+✅ **Good news!** The commission agent filter is already implemented in your `sell_list_filters.blade.php` partial:
+
+```blade
+@if(empty($only) || in_array('sales_cmsn_agnt', $only))
+@if(!empty($is_cmsn_agent_enabled))
+    <div class="col-md-3">
+        <div class="form-group">
+            {!! Form::label('sales_cmsn_agnt',  __('lang_v1.sales_commission_agent') . ':') !!}
+            {!! Form::select('sales_cmsn_agnt', $commission_agents, null, ['class' => 'form-control select2', 'style' => 'width:100%']); !!}
+        </div>
+    </div>
+@endif
+@endif
+```
+
+
+**Note:** The filter uses 
+```text
+$is_cmsn_agent_enabled
+```
+ instead of checking 
+```text
+$commission_agents
+```
+ directly. Make sure this variable is passed from the controller.
+
+### 3.2 Add Commission Agent Column to Table Header​
+
+
+```text
+<table class="table table-bordered table-striped ajax_view" id="sell_table">
+    <thead>
+        <tr>
+            <th>@lang('messages.action')</th>
+            <th>@lang('messages.date')</th>
+            <th>@lang('sale.invoice_no')</th>
+            <th>@lang('sale.customer_name')</th>
+            <th>@lang('lang_v1.contact_no')</th>
+            <th>@lang('sale.location')</th>
+            <th>@lang('sale.payment_status')</th>
+            <th>@lang('lang_v1.payment_method')</th>
+            <th>@lang('sale.total_amount')</th>
+            <th>@lang('sale.total_paid')</th>
+            <th>@lang('lang_v1.sell_due')</th>
+            <th>@lang('lang_v1.sell_return_due')</th>
+            <th>@lang('lang_v1.shipping_status')</th>
+            <th>@lang('lang_v1.total_items')</th>
+            {{-- Add commission agent column --}}
+            <th>@lang('lang_v1.commission_agent')</th>
+            <th>@lang('lang_v1.types_of_service')</th>
+            {{-- ... rest of columns ... --}}
+        </tr>
+    </thead>
+</table>
+```
+
+
+## Step 4: Update JavaScript DataTable Configuration​
+
+### 4.1 Add Commission Agent Column to DataTable​
+
+
+```javascript
+sell_table = $('#sell_table').DataTable({
+    processing: true,
+    serverSide: true,
+    fixedHeader: false,
+    aaSorting: [[1, 'desc']],
+    "ajax": {
+        "url": "/sells",
+        "data": function(d) {
+            // ... existing filters ...
+            
+            // Add commission agent filter
+            d.sales_cmsn_agnt = $('#sales_cmsn_agnt').val();
+            
+            // ... rest of data function ...
+        }
+    },
+    columns: [
+        { data: 'action', name: 'action', orderable: false, "searchable": false },
+        { data: 'transaction_date', name: 'transaction_date' },
+        { data: 'invoice_no', name: 'invoice_no' },
+        { data: 'conatct_name', name: 'conatct_name' },
+        { data: 'mobile', name: 'contacts.mobile' },
+        { data: 'business_location', name: 'bl.name' },
+        { data: 'payment_status', name: 'payment_status' },
+        { data: 'payment_methods', orderable: false, "searchable": false },
+        { data: 'final_total', name: 'final_total' },
+        { data: 'total_paid', name: 'total_paid', "searchable": false },
+        { data: 'total_remaining', name: 'total_remaining' },
+        { data: 'return_due', orderable: false, "searchable": false },
+        { data: 'shipping_status', name: 'shipping_status' },
+        { data: 'total_items', name: 'total_items', "searchable": false },
+        // Add commission agent column
+        { 
+            data: 'commission_agent_name', 
+            name: 'ca.first_name',
+            @if (empty($commission_agents))
+                visible: false
+            @endif
+        },
+        // ... rest of columns ...
+    ],
+    // ... rest of configuration ...
+});
+```
+
+
+### 4.2 Add Filter Change Event Handler​
+
+
+```javascript
+$(document).on('change',
+    '#sell_list_filter_location_id, #sell_list_filter_customer_id, #sell_list_filter_payment_status, #created_by, #sales_cmsn_agnt, #service_staffs, #shipping_status, #sell_list_filter_source, #payment_method',
+    function() {
+        sell_table.ajax.reload();
+    }
+);
+```
+
+
+## Step 5: Update Language Files (Optional)​
+
+Add translation keys if they don't exist:
+
+
+```javascript
+// In resources/lang/en/lang_v1.php
+'commission_agent' => 'Commission Agent',
+```
+
+
+## Step 6: Verify User Model Method​
+
+Ensure the 
+```text
+saleCommissionAgentsDropdown
+```
+ method exists in your User model:
+
+
+```text
+/**
+ * Return list of sales commission agents dropdown for a business
+ *
+ * @param $business_id int
+ * @param $prepend_none = true (boolean)
+ * @return array users
+ */
+public static function saleCommissionAgentsDropdown($business_id, $prepend_none = true)
+{
+    $all_cmmsn_agnts = User::where('business_id', $business_id)
+        ->where('is_cmmsn_agnt', 1)
+        ->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
+
+    $users = $all_cmmsn_agnts->pluck('full_name', 'id');
+
+    //Prepend none
+    if ($prepend_none) {
+        $users = $users->prepend(__('lang_v1.none'), '');
+    }
+
+    return $users;
+}
+```
+
+
+## Step 7: Add Commission Agent to POS Sells List​
+
+### 7.1 POS Controller Setup (Already Complete)​
+
+✅ **Good news!** Your POS controller already has the commission agent logic implemented:
+
+
+```php
+public function index()
+{
+    // ... existing code ...
+    
+    $is_cmsn_agent_enabled = request()->session()->get('business.sales_cmsn_agnt');
+    $commission_agents = [];
+    if (!empty($is_cmsn_agent_enabled)) {
+        $commission_agents = User::forDropdown($business_id, false, true, true);
+    }
+    
+    // ... rest of code ...
+    
+    return view('sale_pos.index')->with(compact(
+        'business_locations', 
+        'customers', 
+        'sales_representative', 
+        'is_cmsn_agent_enabled',  // ✅ Already passed
+        'commission_agents',      // ✅ Already passed
+        'service_staffs', 
+        'is_tables_enabled', 
+        'is_service_staff_enabled', 
+        'is_types_service_enabled', 
+        'shipping_statuses'
+    ));
+}
+```
+
+
+### 7.2 Update POS Sales Table Header​
+
+In 
+```text
+resources/views/sale_pos/partials/sales_table.blade.php
+```
+, add the commission agent column:
+
+
+```text
+<table class="table table-bordered table-striped ajax_view" id="sell_table">
+    <thead>
+        <tr>
+            <th>@lang('messages.action')</th>
+            <th>@lang('messages.date')</th>
+            <th>@lang('sale.invoice_no')</th>
+            <th>@lang('sale.customer_name')</th>
+            <th>@lang('lang_v1.contact_no')</th>
+            <th>@lang('sale.location')</th>
+            <th>@lang('sale.payment_status')</th>
+            <th>@lang('lang_v1.payment_method')</th>
+            <th>@lang('sale.total_amount')</th>
+            <th>@lang('sale.total_paid')</th>
+            <th>@lang('lang_v1.sell_due')</th>
+            <th>@lang('lang_v1.sell_return_due')</th>
+            <th>@lang('lang_v1.shipping_status')</th>
+            <th>@lang('lang_v1.total_items')</th>
+            <th>@lang('lang_v1.types_of_service')</th>
+            <th>{{ $custom_labels['types_of_service']['custom_field_1'] ?? __('lang_v1.service_custom_field_1' )}}</th>
+            {{-- ADD THIS LINE: Commission Agent Column --}}
+            <th>@lang('lang_v1.sales_commission_agent')</th>
+            <th>@lang('lang_v1.added_by')</th>
+            <th>@lang('sale.sell_note')</th>
+            <th>@lang('sale.staff_note')</th>
+            <th>@lang('sale.shipping_details')</th>
+            <th>@lang('restaurant.table')</th>
+            <th>@lang('restaurant.service_staff')</th>
+        </tr>
+    </thead>
+    <tfoot>
+        <tr class="bg-gray font-17 footer-total text-center">
+            <td colspan="6"><strong>@lang('sale.total'):</strong></td>
+            <td class="footer_payment_status_count"></td>
+            <td class="payment_method_count"></td>
+            <td class="footer_sale_total"></td>
+            <td class="footer_total_paid"></td>
+            <td class="footer_total_remaining"></td>
+            <td class="footer_total_sell_return_due"></td>
+            <td colspan="2"></td>
+            <td class="service_type_count"></td>
+            {{-- UPDATE THIS LINE: Increase colspan from 7 to 8 --}}
+            <td colspan="8"></td>
+        </tr>
+    </tfoot>
+</table>
+```
+
+
+### 7.3 Update POS DataTable JavaScript Configuration​
+
+In 
+```text
+resources/views/sale_pos/partials/sale_table_javascript.blade.php
+```
+, add the commission agent column:
+
+
+```text
+columns: [
+    { data: 'action', name: 'action', orderable: false, "searchable": false},
+    { data: 'transaction_date', name: 'transaction_date'  },
+    { data: 'invoice_no', name: 'invoice_no'},
+    { data: 'conatct_name', name: 'conatct_name'},
+    { data: 'mobile', name: 'contacts.mobile'},
+    { data: 'business_location', name: 'bl.name'},
+    { data: 'payment_status', name: 'payment_status'},
+    { data: 'payment_methods', orderable: false, "searchable": false},
+    { data: 'final_total', name: 'final_total'},
+    { data: 'total_paid', name: 'total_paid', "searchable": false},
+    { data: 'total_remaining', name: 'total_remaining'},
+    { data: 'return_due', orderable: false, "searchable": false},
+    { data: 'shipping_status', name: 'shipping_status'},
+    { data: 'total_items', name: 'total_items', "searchable": false},
+    { data: 'types_of_service_name', name: 'tos.name', @if(empty($is_types_service_enabled)) visible: false @endif},
+    { data: 'service_custom_field_1', name: 'service_custom_field_1', @if(empty($is_types_service_enabled)) visible: false @endif},
+    // ADD THIS LINE: Commission Agent Column
+    { data: 'commission_agent_name', name: 'ca.first_name', @if(empty($is_cmsn_agent_enabled)) visible: false @endif},
+    { data: 'added_by', name: 'u.first_name'},
+    { data: 'additional_notes', name: 'additional_notes'},
+    { data: 'staff_note', name: 'staff_note'},
+    { data: 'shipping_details', name: 'shipping_details'},
+    { data: 'table_name', name: 'tables.name', @if(empty($is_tables_enabled)) visible: false @endif },
+    { data: 'waiter', name: 'ss.first_name', @if(empty($is_service_staff_enabled)) visible: false @endif }
+],
+```
+
+
+### 7.4 Why POS Implementation is Simple​
+
+The POS implementation is straightforward because:
+
+  1. ✅ **Filter Already Works** : POS uses the same filter partial (
+```text
+sell_list_filters.blade.php
+```
+)
+  2. ✅ **Same AJAX Endpoint** : POS uses the same 
+```text
+/sells
+```
+ endpoint you already updated
+  3. ✅ **Commission Agent Data Available** : The query changes you made apply to both regular and POS sells
+  4. ✅ **Controller Variables Set** : The POS controller already passes required variables
+  5. ✅ **Filter JavaScript Ready** : The change event handler already includes 
+```text
+#sales_cmsn_agnt
+```
+
+
+
+
+### 7.5 Testing POS Implementation​
+
+  1. **Navigate to POS Sells List** : Go to 
+```text
+/pos
+```
+
+  2. **Check Filter** : The commission agent filter should appear in the filters section
+  3. **Verify Column** : The commission agent column should show/hide based on business settings
+  4. **Test Filtering** : Select a commission agent and verify the table filters correctly
+  5. **Check Responsiveness** : Ensure the table remains responsive with the new column
+
+
+
+### 7.6 Notes​
+
+  * The commission agent column will automatically show/hide based on 
+```text
+$is_cmsn_agent_enabled
+```
+
+  * No additional backend changes needed since POS uses the same data source
+  * The filter functionality works immediately since it uses the same backend logic
+
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋

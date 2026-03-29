@@ -1,0 +1,232 @@
+﻿    <div class="icon-grid">
+        <!-- Transactions with toggle functionality -->
+        @if(auth()->user()->can('purchase_n_sell_report.view') || auth()->user()->can('contacts_report.view') ||
+        auth()->user()->can('stock_report.view') || auth()->user()->can('tax_report.view') ||
+        auth()->user()->can('trending_product_report.view') || auth()->user()->can('sales_representative.view') ||
+        auth()->user()->can('register_report.view') || auth()->user()->can('expense_report.view'))
+        <a href="#" class="app-icon" id="transactions-toggle">
+            <div class="icon-container">
+                <span class="emoji">📊</span>
+            </div>
+            <span class="app-label">Transactions</span>
+        </a>
+        @endif
+        <!-- POS -->
+        @if(auth()->user()->can('sell.create') && in_array('pos_sale', $enabled_modules))
+        <a href="/pos/create" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🏪</span>
+            </div>
+            <span class="app-label">POS Sale</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('sell.view') && in_array('pos_sale', $enabled_modules))
+        <a href="/pos" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">📋</span>
+            </div>
+            <span class="app-label">List POS</span>
+        </a>
+        @endif
+        <!-- Users -->
+        @if(auth()->user()->can('user.view') || auth()->user()->can('user.create') || auth()->user()->can('roles.view'))
+        @if(auth()->user()->can('user.view'))
+        <a href="/users" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">👥</span>
+            </div>
+            <span class="app-label">Users</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('roles.view'))
+        <a href="/roles" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🏷️</span>
+            </div>
+            <span class="app-label">Roles</span>
+        </a>
+        @endif
+        @endif
+        <!-- Contacts -->
+        @if(auth()->user()->can('supplier.view') || auth()->user()->can('customer.view') ||
+        auth()->user()->can('supplier.view_own') || auth()->user()->can('customer.view_own'))
+        @if(auth()->user()->can('supplier.view') || auth()->user()->can('supplier.view_own'))
+        <a href="/contacts?type=supplier" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">📞</span>
+            </div>
+            <span class="app-label">Suppliers</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('customer.view') || auth()->user()->can('customer.view_own'))
+        <a href="/contacts?type=customer" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">👤</span>
+            </div>
+            <span class="app-label">Customers</span>
+        </a>
+        @endif
+        @endif
+        <!-- Products -->
+        @if(auth()->user()->can('product.view') || auth()->user()->can('product.create') ||
+        auth()->user()->can('brand.view') || auth()->user()->can('unit.view') || auth()->user()->can('category.view') ||
+        auth()->user()->can('brand.create') || auth()->user()->can('unit.create') ||
+        auth()->user()->can('category.create'))
+        @if(auth()->user()->can('product.view'))
+        <a href="/products" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">📦</span>
+            </div>
+            <span class="app-label">Products</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('product.create'))
+        <a href="/products/create" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">➕</span>
+            </div>
+            <span class="app-label">Add Product</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('product.view'))
+        <a href="/labels/show" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🏷️</span>
+            </div>
+            <span class="app-label">Labels</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('category.view') || auth()->user()->can('category.create'))
+        <a href="/taxonomies?type=product" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🗂️</span>
+            </div>
+            <span class="app-label">Categories</span>
+        </a>
+        @endif
+        @endif
+        <!-- Purchases -->
+        @if(in_array('purchases', $enabled_modules) && (auth()->user()->can('purchase.view') ||
+        auth()->user()->can('purchase.create') || auth()->user()->can('purchase.update')))
+        @if(auth()->user()->can('purchase.view') || auth()->user()->can('view_own_purchase'))
+        <a href="/purchases" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🛒</span>
+            </div>
+            <span class="app-label">Purchases</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('purchase.create'))
+        <a href="/purchases/create" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🛍️</span>
+            </div>
+            <span class="app-label">Add Purchase</span>
+        </a>
+        @endif
+        @endif
+        <!-- Sales -->
+        @if($is_admin || auth()->user()->hasAnyPermission(['sell.view', 'sell.create', 'direct_sell.access',
+        'view_own_sell_only', 'view_commission_agent_sell', 'access_shipping', 'access_own_shipping',
+        'access_commission_agent_shipping', 'access_sell_return', 'direct_sell.view', 'direct_sell.update',
+        'access_own_sell_return']))
+        @if($is_admin || auth()->user()->hasAnyPermission(['sell.view', 'sell.create', 'direct_sell.access',
+        'direct_sell.view', 'view_own_sell_only', 'view_commission_agent_sell', 'access_shipping',
+        'access_own_shipping', 'access_commission_agent_shipping']))
+        <a href="/sells" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">💰</span>
+            </div>
+            <span class="app-label">Sales</span>
+        </a>
+        @endif
+        @if(in_array('add_sale', $enabled_modules) && auth()->user()->can('direct_sell.access'))
+        <a href="/sells/create" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🛍️</span>
+            </div>
+            <span class="app-label">Add Sale</span>
+        </a>
+        @endif
+        @endif
+        <!-- Stock Management -->
+        @if(in_array('stock_transfers', $enabled_modules) && (auth()->user()->can('purchase.view') ||
+        auth()->user()->can('purchase.create') || auth()->user()->can('view_own_purchase')))
+        @if(auth()->user()->can('purchase.view') || auth()->user()->can('view_own_purchase'))
+        <a href="/stock-transfers" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🚚</span>
+            </div>
+            <span class="app-label">Transfers</span>
+        </a>
+        @endif
+        @endif
+        @if(in_array('stock_adjustment', $enabled_modules) && (auth()->user()->can('purchase.view') ||
+        auth()->user()->can('purchase.create') || auth()->user()->can('view_own_purchase')))
+        @if(auth()->user()->can('purchase.view') || auth()->user()->can('view_own_purchase'))
+        <a href="/stock-adjustments" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">⚖️</span>
+            </div>
+            <span class="app-label">Adjustments</span>
+        </a>
+        @endif
+        @endif
+        <!-- Expenses -->
+        @if(in_array('expenses', $enabled_modules) && (auth()->user()->can('all_expense.access') ||
+        auth()->user()->can('view_own_expense')))
+        @if(auth()->user()->can('expense.add'))
+        <a href="/expenses/create" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">💸</span>
+            </div>
+            <span class="app-label">Add Expense</span>
+        </a>
+        @endif
+        @endif
+        <!-- Reports -->
+        @if(auth()->user()->can('purchase_n_sell_report.view') || auth()->user()->can('contacts_report.view') ||
+        auth()->user()->can('stock_report.view') || auth()->user()->can('tax_report.view') ||
+        auth()->user()->can('trending_product_report.view') || auth()->user()->can('sales_representative.view') ||
+        auth()->user()->can('register_report.view') || auth()->user()->can('expense_report.view'))
+        @if((in_array('purchases', $enabled_modules) || in_array('add_sale', $enabled_modules) || in_array('pos_sale',
+        $enabled_modules)) && auth()->user()->can('purchase_n_sell_report.view'))
+        <a href="/reports/purchase-sell" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">📈</span>
+            </div>
+            <span class="app-label">Purchase Report</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('stock_report.view'))
+        <a href="/reports/stock-report" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">📊</span>
+            </div>
+            <span class="app-label">Stock Report</span>
+        </a>
+        @endif
+        @endif
+        <!-- Settings -->
+        @if(auth()->user()->can('business_settings.access') || auth()->user()->can('barcode_settings.access') ||
+        auth()->user()->can('invoice_settings.access') || auth()->user()->can('tax_rate.view') ||
+        auth()->user()->can('tax_rate.create') || auth()->user()->can('access_package_subscriptions'))
+        @if(auth()->user()->can('business_settings.access'))
+        <a href="/business/settings" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">⚙️</span>
+                {{-- <span class="notification-badge">1</span> --}}
+            </div>
+            <span class="app-label">Settings</span>
+        </a>
+        @endif
+        @if(auth()->user()->can('invoice_settings.access'))
+        <a href="/invoice-schemes" class="app-icon">
+            <div class="icon-container">
+                <span class="emoji">🧾</span>
+            </div>
+            <span class="app-label">Invoice Settings</span>
+        </a>
+        @endif
+        @endif
+    </div>

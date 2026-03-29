@@ -1,0 +1,1003 @@
+---
+title: "Product Field Visibility Settings"
+sidebar_label: "Product Field Visibility Settings"
+slug: /product-field-visibility-settings-product-field-visibility-settings-ultimate-pos-tutorials-v1
+hide_title: true
+toc: false
+---
+
+# Product Field Visibility Settings Implementation Guide
+
+This guide will walk you through implementing configurable visibility settings for product form fields in your Laravel Ultimate POS application. This feature allows administrators to show/hide specific product fields from the business settings panel, providing a cleaner interface and better control over which fields are displayed.
+
+![Product Field Visibility Settings](/img/docs/product-field-visibility-settings-1.png)
+
+## 📦 Download Starter Files​
+
+[**Download Implementation Template**](https://ultimate-pos-tutorials.vercel.app/assets/files/product-field-visiblity-settings-files-e671279cdcb4834745b298693b123caf.zip)
+
+## 📁 Complete Implementation Tree​
+
+
+```text
+your-laravel-app/
+├── 📁 app/
+│   └── 📁 Http/
+│       └── 📁 Controllers/
+│           └── 📄 ProductController.php ← UPDATE: Add defensive coding for weight & preparation_time_in_minutes
+│
+├── 📁 resources/
+│   └── 📁 views/
+│       ├── 📁 business/
+│       │   └── 📁 partials/
+│       │       └── 📄 settings_product.blade.php ← ADD: New checkbox settings
+│       └── 📁 product/
+│           ├── 📄 create.blade.php ← ADD: Conditional @if checks + hidden fields
+│           └── 📄 edit.blade.php ← ADD: Conditional @if checks + hidden fields
+│
+└── 📁 lang/
+    └── 📁 en/
+        └── 📄 lang_v1.php ← ADD: New translation keys
+```
+
+
+## Overview​
+
+The Product Field Visibility Settings feature allows you to control which fields appear in the product create/edit forms through checkboxes in the business settings. This helps:
+
+  * **Simplify the UI** \- Hide fields you don't use
+  * **Reduce clutter** \- Show only relevant fields for your business
+  * **Improve user experience** \- Faster form completion with fewer fields
+  * **Customize per business** \- Different settings for different locations/businesses
+
+
+
+## 🎯 Supported Field Visibility Controls​
+
+This implementation controls visibility for the following product fields:
+
+  1. **Product Description** \- Long text description field
+  2. **Product Brochure** \- PDF/document upload field
+  3. **Advanced Fields Group** (IMEI, Weight, Not for Selling, Service Staff Timer)
+  4. **Single Product Image** \- Main product image upload
+  5. **Barcode Type** \- Barcode type dropdown
+
+
+
+## 🔧 Implementation Steps​
+
+### 1️⃣ **Add Settings to Business Settings Page**​
+
+First, add the checkbox options to the product settings tab in business settings.
+
+**File:** 
+```text
+resources/views/business/partials/settings_product.blade.php
+```
+
+
+Add these checkboxes after the existing product settings (around line 185):
+
+
+```javascript
+<div class="clearfix"></div>
+
+<!-- Product Description -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_product_description]', 1,
+                !empty($common_settings['enable_product_description']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_product_description' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Product Brochure -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_product_brochure]', 1,
+                !empty($common_settings['enable_product_brochure']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_product_brochure' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Advanced Fields (IMEI, Weight, etc) -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_product_advanced_fields]', 1,
+                !empty($common_settings['enable_product_advanced_fields']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_product_advanced_fields' ) }}
+          </label>
+          @show_tooltip(__('lang_v1.enable_product_advanced_fields_tooltip'))
+        </div>
+    </div>
+</div>
+
+<div class="clearfix"></div>
+
+<!-- Single Product Image -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_single_product_image]', 1,
+                !empty($common_settings['enable_single_product_image']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_single_product_image' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Enable IMEI/Serial Number -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_product_enable_desc_imei_sn]', 1,
+                !empty($common_settings['enable_product_enable_desc_imei_sn']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_product_enable_desc_imei_sn' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Not for Selling -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_not_for_selling]', 1,
+                !empty($common_settings['enable_not_for_selling']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_not_for_selling' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<div class="clearfix"></div>
+
+<!-- Weight -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_weight]', 1,
+                !empty($common_settings['enable_weight']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_weight' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Service Staff Timer/Preparation Time -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_service_staff_timer]', 1,
+                !empty($common_settings['enable_service_staff_timer']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_service_staff_timer' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<!-- Barcode Type -->
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_barcode_type]', 1,
+                !empty($common_settings['enable_barcode_type']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_barcode_type' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+```
+
+
+### 2️⃣ **Update Product Create Page**​
+
+Wrap each field section with conditional checks based on the settings.
+
+**File:** 
+```text
+resources/views/product/create.blade.php
+```
+
+
+#### Barcode Type (around line 40):​
+
+
+```javascript
+@if (!empty($common_settings['enable_barcode_type']))
+<div class="col-sm-4">
+    <div class="form-group">
+        {!! Form::label('barcode_type', __('product.barcode_type') . ':*') !!}
+        {!! Form::select('barcode_type', $barcode_types, !empty($duplicate_product->barcode_type) ? $duplicate_product->barcode_type : $barcode_default, ['class' => 'form-control select2', 'required']); !!}
+    </div>
+</div>
+@endif
+```
+
+
+#### Product Description (around line 152):​
+
+
+```javascript
+@if (!empty($common_settings['enable_product_description']))
+<div class="col-sm-8 mb-5">
+    <div class="form-group">
+        <div class="row">
+            <div class="col-sm-8 product-description-label">
+                {!! Form::label('product_description', __('lang_v1.product_description') . ':') !!}
+            </div>
+        </div>
+        {!! Form::textarea('product_description', !empty($duplicate_product->product_description) ? $duplicate_product->product_description : null, ['class' => 'form-control']); !!}
+    </div>
+</div>
+@endif
+```
+
+
+#### Single Product Image (around line 165):​
+
+
+```javascript
+@if (!empty($common_settings['enable_single_product_image']))
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="row">
+            <div class="col-sm-6 image-label">
+            {!! Form::label('image', __('lang_v1.product_image') . ':') !!}
+            </div>
+        </div>
+        {!! Form::file('image', ['id' => 'upload_image', 'accept' => 'image/*',
+        'required' => $is_image_required, 'class' => 'upload-element']); !!}
+        <small>
+            <p class="help-block">@lang('purchase.max_file_size', ['size' => (config('constants.document_size_limit') / 1000000)]) <br> @lang('lang_v1.aspect_ratio_should_be_1_1')</p>
+        </small>
+    </div>
+</div>
+@endif
+```
+
+
+#### Product Brochure (around line 183):​
+
+
+```javascript
+@if (!empty($common_settings['enable_product_brochure']))
+<div class="col-sm-4">
+    <div class="form-group">
+        {!! Form::label('product_brochure', __('lang_v1.product_brochure') . ':') !!}
+        {!! Form::file('product_brochure', ['id' => 'product_brochure', 'accept' => implode(',', array_keys(config('constants.document_upload_mimes_types')))]); !!}
+        <small>
+            <p class="help-block">
+                @lang('purchase.max_file_size', ['size' => (config('constants.document_size_limit') / 1000000)])
+            </p>
+        </small>
+    </div>
+</div>
+@endif
+```
+
+
+#### IMEI/Serial Number (around line 226):​
+
+
+```javascript
+@if (!empty($common_settings['enable_product_enable_desc_imei_sn']))
+<div class="col-sm-4">
+    <div class="form-group">
+        <br>
+        <label>
+            {!! Form::checkbox('enable_sr_no', 1, !(empty($duplicate_product)) ? $duplicate_product->enable_sr_no : false, ['class' => 'input-icheck']); !!} <strong>@lang('lang_v1.enable_imei_or_sr_no')</strong>
+        </label> @show_tooltip(__('lang_v1.tooltip_sr_no'))
+    </div>
+</div>
+@endif
+```
+
+
+#### Not for Selling (around line 237):​
+
+
+```javascript
+@if (!empty($common_settings['enable_not_for_selling']))
+<div class="col-sm-4">
+    <div class="form-group">
+        <br>
+        <label>
+            {!! Form::checkbox('not_for_selling', 1, !(empty($duplicate_product)) ? $duplicate_product->not_for_selling : false, ['class' => 'input-icheck']); !!} <strong>@lang('lang_v1.not_for_selling')</strong>
+        </label> @show_tooltip(__('lang_v1.tooltip_not_for_selling'))
+    </div>
+</div>
+@endif
+```
+
+
+#### Weight (around line 280):​
+
+
+```javascript
+@if (!empty($common_settings['enable_weight']))
+<div class="col-sm-4">
+    <div class="form-group">
+        {!! Form::label('weight', __('lang_v1.weight') . ':') !!}
+        {!! Form::text('weight', !empty($duplicate_product->weight) ? $duplicate_product->weight : null, ['class' => 'form-control', 'placeholder' => __('lang_v1.weight')]); !!}
+    </div>
+</div>
+@else
+{!! Form::hidden('weight', !empty($duplicate_product->weight) ? $duplicate_product->weight : null) !!}
+@endif
+```
+
+
+Hidden Field Required
+
+When the weight field is disabled, you must include a hidden input to preserve existing weight values and prevent "Undefined array key 'weight'" errors in the controller. The 
+```text
+@else
+```
+ clause ensures the field value is always submitted with the form.
+
+#### Service Staff Timer/Preparation Time (around line 328):​
+
+
+```javascript
+@if (!empty($common_settings['enable_service_staff_timer']))
+<div class="col-sm-3">
+    <div class="form-group">
+        {!! Form::label('preparation_time_in_minutes', __('lang_v1.preparation_time_in_minutes') . ':') !!}
+        {!! Form::number('preparation_time_in_minutes', !empty($duplicate_product->preparation_time_in_minutes) ? $duplicate_product->preparation_time_in_minutes : null, ['class' => 'form-control', 'placeholder' => __('lang_v1.preparation_time_in_minutes')]); !!}
+    </div>
+</div>
+@endif
+```
+
+
+### 3️⃣ **Update Product Edit Page**​
+
+Apply the same conditional checks to the edit page.
+
+**File:** 
+```text
+resources/views/product/edit.blade.php
+```
+
+
+Apply the exact same 
+```text
+@if
+```
+ conditionals around each corresponding field section as shown above for the create page.
+
+**Important: Weight Field in Edit Page**
+
+For the weight field in the edit page, also include the hidden field fallback:
+
+
+```javascript
+@if (!empty($common_settings['enable_weight']))
+<div class="col-sm-4">
+  <div class="form-group">
+    {!! Form::label('weight',  __('lang_v1.weight') . ':') !!}
+    {!! Form::text('weight', $product->weight, ['class' => 'form-control', 'placeholder' => __('lang_v1.weight')]); !!}
+  </div>
+</div>
+@else
+{!! Form::hidden('weight', $product->weight) !!}
+@endif
+```
+
+
+### 4️⃣ **Update Product Controller**​
+
+To handle cases where fields might be missing from the request, update the controller to use defensive coding.
+
+**File:** 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+
+In the 
+```text
+update
+```
+ method (around line 727-751), update these field assignments to use the null coalescing operator:
+
+
+```text
+// Before (causes "Undefined array key" errors when disabled)
+$product->weight = $product_details['weight'];
+$product->preparation_time_in_minutes = $product_details['preparation_time_in_minutes'];
+
+// After (handles missing fields gracefully)
+$product->weight = $product_details['weight'] ?? null;
+$product->preparation_time_in_minutes = $product_details['preparation_time_in_minutes'] ?? null;
+```
+
+
+**Complete Example from ProductController.php (lines 727-751):**
+
+
+```php
+$product->tax_type = $product_details['tax_type'];
+$product->weight = $product_details['weight'] ?? null;
+$product->product_custom_field1 = $product_details['product_custom_field1'] ?? '';
+// ... other custom fields ...
+
+$product->product_description = $product_details['product_description'];
+$product->sub_unit_ids = ! empty($product_details['sub_unit_ids']) ? $product_details['sub_unit_ids'] : null;
+$product->preparation_time_in_minutes = $product_details['preparation_time_in_minutes'] ?? null;
+$product->warranty_id = ! empty($request->input('warranty_id')) ? $request->input('warranty_id') : null;
+```
+
+
+This ensures that even if the weight or preparation_time_in_minutes fields are missing from the request (when their respective settings are disabled), the controller won't throw an error.
+
+Defensive Coding
+
+Using the null coalescing operator (
+```text
+??
+```
+) is a best practice when dealing with optional or conditionally-rendered form fields. It prevents "Undefined array key" errors and provides a sensible default value (null) when the field is absent.
+
+### 5️⃣ **Add Translation Keys**​
+
+Add the translation keys for all the new settings.
+
+**File:** 
+```text
+lang/en/lang_v1.php
+```
+
+
+Add these keys to the array:
+
+
+```javascript
+'enable_product_description' => 'Enable Product Description',
+'enable_product_brochure' => 'Enable Product Brochure',
+'enable_product_advanced_fields' => 'Enable Advanced Fields',
+'enable_product_advanced_fields_tooltip' => 'Enable IMEI, Weight, Not for Selling, and Service Staff Timer fields',
+'enable_single_product_image' => 'Enable Single Product Image',
+'enable_product_enable_desc_imei_sn' => 'Enable IMEI/Serial Number',
+'enable_not_for_selling' => 'Enable Not for Selling',
+'enable_weight' => 'Enable Weight',
+'enable_service_staff_timer' => 'Enable Service Staff Timer/Preparation Time',
+'enable_barcode_type' => 'Enable Barcode Type',
+```
+
+
+## 📝 How Settings Work​
+
+### Understanding 
+```text
+$common_settings
+```
+​
+
+The 
+```text
+$common_settings
+```
+ variable is automatically passed to product create/edit views by the ProductController. It contains all settings stored in the 
+```text
+common_settings
+```
+ column of the 
+```text
+business
+```
+ table.
+
+**Database Storage:**
+
+
+```text
+{
+  "enable_product_description": 1,
+  "enable_product_brochure": 1,
+  "enable_single_product_image": 1,
+  ...
+}
+```
+
+
+**In Blade Templates:**
+
+
+```text
+// Check if setting is enabled
+@if (!empty($common_settings['enable_product_description']))
+    // Show field
+@endif
+```
+
+
+### Settings Flow​
+
+
+```text
+1. Admin goes to Settings → Product Settings
+2. Checks/unchecks field visibility options
+3. Form submits to BusinessController@postBusinessSettings()
+4. Settings saved to business.common_settings (JSON)
+5. When user opens Product Create/Edit:
+   - Controller loads $common_settings from database
+   - Passes to view
+   - Blade checks settings with @if conditionals
+   - Shows/hides fields accordingly
+```
+
+
+## 🎨 Best Practices​
+
+### 1\. **Default Values**​
+
+When adding new settings, decide on sensible defaults:
+
+
+```text
+// Enable by default (backward compatibility)
+!empty($common_settings['enable_product_description']) ? true : false
+
+// Or use null coalescing
+$common_settings['enable_product_description'] ?? true
+```
+
+
+### 2\. **Hidden Fields for Optional Data**​
+
+**IMPORTANT:** When hiding fields that store data in the database, always include a hidden field to preserve existing values:
+
+
+```text
+@if (!empty($common_settings['enable_weight']))
+    {!! Form::text('weight', $product->weight, [...]) !!}
+@else
+    {!! Form::hidden('weight', $product->weight) !!}
+@endif
+```
+
+
+**Why this matters:**
+
+  * Preserves existing data when field is disabled
+  * Prevents "Undefined array key" errors in the controller
+  * Maintains data integrity across form submissions
+
+
+
+**When to use:**
+
+  * ✅ Fields that store data (weight, description, etc.)
+  * ✅ Fields that might already have values in the database
+  * ❌ New optional fields with no existing data
+  * ❌ Fields that should be cleared when disabled
+
+
+
+### 3\. **Controller Defensive Coding**​
+
+Always use the null coalescing operator when accessing conditionally-rendered form fields:
+
+
+```text
+// Bad - Will throw error if field is missing
+$product->weight = $product_details['weight'];
+
+// Good - Handles missing fields gracefully
+$product->weight = $product_details['weight'] ?? null;
+
+// Even better - With type checking
+$product->weight = !empty($product_details['weight'])
+    ? $this->productUtil->num_uf($product_details['weight'])
+    : null;
+```
+
+
+### 4\. **Grouping Related Fields**​
+
+Group related settings together in the UI:
+
+
+```text
+<div class="clearfix"></div>
+
+<h4>Product Information Fields</h4>
+
+<div class="col-sm-4">
+    <!-- Description checkbox -->
+</div>
+<div class="col-sm-4">
+    <!-- Brochure checkbox -->
+</div>
+```
+
+
+### 5\. **Validation Handling**​
+
+Ensure validation rules match field visibility:
+
+
+```php
+// In ProductController
+public function store(Request $request)
+{
+    $rules = ['name' => 'required'];
+
+    // Only validate if field is enabled
+    if (!empty($common_settings['enable_weight'])) {
+        $rules['weight'] = 'nullable|numeric';
+    }
+
+    $request->validate($rules);
+}
+```
+
+
+## 🔍 Troubleshooting​
+
+### Issue: "Undefined array key" Errors (weight, preparation_time_in_minutes)​
+
+**Problem:** When certain fields are disabled and you try to edit a product, you get errors like:
+
+  * 
+```text
+Undefined array key "weight"
+```
+
+  * 
+```text
+Undefined array key "preparation_time_in_minutes"
+```
+
+
+
+
+**Root Cause:** The controller tries to access 
+```text
+$product_details['field_name']
+```
+ but the field wasn't submitted in the form because it was hidden by the 
+```text
+@if
+```
+ conditional.
+
+**Solution - Two Approaches:**
+
+**Approach 1: Hidden Field (for fields with existing data)** Best for: 
+```text
+weight
+```
+, 
+```text
+product_description
+```
+, and other fields that store important data
+
+  1. **Add hidden field in blade templates:**
+
+
+```text
+@if (!empty($common_settings['enable_weight']))
+    <!-- Visible weight field -->
+@else
+    {!! Form::hidden('weight', $product->weight) !!}
+@endif
+```
+
+
+  2. **Update controller to use null coalescing:**
+
+
+```text
+// In ProductController update() method
+$product->weight = $product_details['weight'] ?? null;
+```
+
+
+
+
+
+**Approach 2: Null Coalescing Only (for optional fields)** Best for: 
+```text
+preparation_time_in_minutes
+```
+ and other truly optional fields
+
+Simply update the controller:
+
+
+```text
+// In ProductController update() method
+$product->preparation_time_in_minutes = $product_details['preparation_time_in_minutes'] ?? null;
+```
+
+
+**Which approach to use?**
+
+  * ✅ Use Approach 1 (hidden field) for fields that should preserve existing values
+  * ✅ Use Approach 2 (null coalescing only) for fields that can be cleared/null
+  * ✅ Both approaches prevent errors, but have different data preservation behavior
+
+
+
+This approach ensures:
+
+  * Existing values are preserved when the field is disabled (Approach 1)
+  * The controller handles missing fields gracefully
+  * No errors occur when the field is disabled
+
+
+
+### Issue: Settings Not Saving​
+
+**Solution:** Check if form name matches database column:
+
+
+```text
+// Correct
+{!! Form::checkbox('common_settings[enable_product_description]', ...) !!}
+
+// Wrong
+{!! Form::checkbox('enable_product_description', ...) !!}
+```
+
+
+### Issue: Fields Still Showing When Disabled​
+
+**Solution:** Clear Laravel cache:
+
+
+```text
+php artisan cache:clear
+php artisan config:clear
+php artisan view:clear
+```
+
+
+### Issue: Translation Not Showing​
+
+**Solution:** Add the key to all language files, not just 
+```text
+en
+```
+:
+
+
+```javascript
+// lang/ar/lang_v1.php
+'enable_product_description' => 'تمكين وصف المنتج',
+
+// lang/fr/lang_v1.php
+'enable_product_description' => 'Activer la description du produit',
+```
+
+
+## 🚀 Testing Your Implementation​
+
+### Test Checklist​
+
+  * Business settings page loads without errors
+  * All checkboxes appear correctly
+  * Can save settings successfully
+  * Product create page respects settings
+  * Product edit page respects settings
+  * Fields hidden when unchecked
+  * Fields shown when checked
+  * **Weight field preserves existing values when disabled**
+  * **Preparation time field handles null when disabled**
+  * **No "Undefined array key 'weight'" errors when editing products**
+  * **No "Undefined array key 'preparation_time_in_minutes'" errors when editing products**
+  * Translations work in all languages
+  * No JavaScript console errors
+  * Mobile responsive layout maintained
+
+
+
+### Manual Testing Steps​
+
+  1. **Go to Settings → Product Settings**
+  2. **Uncheck "Enable Product Description"**
+  3. **Save settings**
+  4. **Go to Products → Add Product**
+  5. **Verify description field is hidden**
+  6. **Go back to settings and check the box**
+  7. **Return to Add Product**
+  8. **Verify description field is now visible**
+
+
+
+### Testing Optional Fields (Critical Tests)​
+
+#### Test 1: Weight Field (Data Preservation)​
+
+  1. **Create a product with a weight value** (e.g., 2.5 kg)
+  2. **Go to Settings → Product Settings**
+  3. **Uncheck "Enable Weight"**
+  4. **Save settings**
+  5. **Go to Products and edit the product you just created**
+  6. **Verify:** Weight field is hidden
+  7. **Make any other change** (e.g., update product name)
+  8. **Save the product**
+  9. **Verify:** No "Undefined array key 'weight'" error occurs
+  10. **Re-enable weight in settings and edit product again**
+  11. **Verify:** Original weight value (2.5 kg) is still preserved
+
+
+
+#### Test 2: Preparation Time Field (Null Handling)​
+
+  1. **Create a product with a preparation time value** (e.g., 15 minutes)
+  2. **Go to Settings → Product Settings**
+  3. **Uncheck "Enable Service Staff Timer/Preparation Time"**
+  4. **Save settings**
+  5. **Go to Products and edit the product you just created**
+  6. **Verify:** Preparation time field is hidden
+  7. **Make any other change** (e.g., update product name)
+  8. **Save the product**
+  9. **Verify:** No "Undefined array key 'preparation_time_in_minutes'" error occurs
+  10. **Re-enable Service Staff Timer in settings and edit product again**
+  11. **Verify:** Preparation time value may be cleared (this is expected for optional fields without hidden field fallback)
+
+
+
+## 📚 Additional Customizations​
+
+### Adding More Field Controls​
+
+To add control for another field:
+
+  1. **Add checkbox to settings:**
+
+
+
+
+```javascript
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+          <label>
+            {!! Form::checkbox('common_settings[enable_custom_field]', 1,
+                !empty($common_settings['enable_custom_field']) ? true : false,
+            [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_custom_field' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+```
+
+
+  2. **Wrap field in create/edit pages (with hidden field fallback):**
+
+
+
+
+```text
+@if (!empty($common_settings['enable_custom_field']))
+    {!! Form::text('custom_field', $product->custom_field, [...]) !!}
+@else
+    {!! Form::hidden('custom_field', $product->custom_field) !!}
+@endif
+```
+
+
+Don't Forget the Hidden Field
+
+If your field stores data in the database, always include the 
+```text
+@else
+```
+ clause with a hidden field. This prevents data loss and "Undefined array key" errors.
+
+  3. **Update controller with defensive coding:**
+
+
+
+
+```text
+// In ProductController update() method
+$product->custom_field = $product_details['custom_field'] ?? null;
+```
+
+
+  4. **Add translation:**
+
+
+
+
+```javascript
+'enable_custom_field' => 'Enable Custom Field',
+```
+
+
+## 💡 Pro Tips​
+
+  1. **Use Meaningful Names:** Setting names should be descriptive
+
+     * ✅ 
+```text
+enable_product_description
+```
+
+     * ❌ 
+```text
+desc_field
+```
+
+  2. **Add Tooltips:** Help admins understand what fields will be hidden
+
+
+```text
+@show_tooltip(__('lang_v1.enable_product_description_tooltip'))
+```
+
+
+  3. **Consider Dependencies:** Some fields may depend on others
+
+
+```text
+@if (!empty($common_settings['enable_variants']))
+    @if (!empty($common_settings['enable_variant_image']))
+        <!-- Show variant image field -->
+    @endif
+@endif
+```
+
+
+  4. **Keep Backward Compatibility:** Default to showing fields for existing installations
+
+
+```text
+!empty($common_settings['enable_field']) ? true : false
+// This returns true if not set, maintaining current behavior
+```
+
+
+
+
+
+## 🎯 Summary​
+
+You've now implemented a complete field visibility settings system that:
+
+  * ✅ Allows administrators to control product form fields
+  * ✅ Simplifies the UI by hiding unused fields
+  * ✅ Maintains backward compatibility
+  * ✅ Provides a clean, organized settings interface
+  * ✅ Works seamlessly with translations
+
+
+
+The settings are stored in the database, persist across sessions, and provide instant feedback when toggled.
+
+### 💬 Comments
+
+Commenting as: **ithiyacloud5@gmail.com**
+
+Post Comment
+
+💭 No comments yet
+
+Be the first to share your thoughts!
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)

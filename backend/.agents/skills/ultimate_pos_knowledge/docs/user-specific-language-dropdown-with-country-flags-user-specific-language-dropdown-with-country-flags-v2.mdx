@@ -1,0 +1,782 @@
+---
+title: "User-Specific Language Dropdown with Country Flags"
+sidebar_label: "User-Specific Language Dropdown with Country Flags"
+slug: /user-specific-language-dropdown-with-country-flags-user-specific-language-dropdown-with-country-flags-v2
+hide_title: true
+toc: false
+---
+
+# User-Specific Language Dropdown with Country Flags
+
+This guide documents the implementation of a user-specific language dropdown with country flags that allows each user to set their own language preference, saves it to the database, and applies it across the entire application.
+
+## Overview​
+
+![Dropdown button in header](/img/docs/dropdown-button-in-header-1.png)
+
+The language dropdown provides:
+
+  * Real country flag icons for each language
+  * User-specific language preferences stored in database
+  * Automatic language switching across the entire application
+  * Persistent language settings across login sessions
+  * Clean, responsive design
+
+
+
+## Prerequisites​
+
+  * Laravel application with user authentication
+  * Existing translation files in 
+```text
+lang/
+```
+ directory
+  * User table with language field
+  * Basic understanding of Laravel middleware and localization
+
+
+
+## Step 1: Verify Language Constants​
+
+This project uses the existing 
+```text
+langs
+```
+ configuration in 
+```text
+config/constants.php
+```
+ for supported languages.
+
+### File: 
+```text
+config/constants.php
+```
+​
+
+The configuration should already include:
+
+
+```javascript
+'langs' => [
+    'en' => ['full_name' => 'English', 'short_name' => 'English'],
+    'es' => ['full_name' => 'Spanish - Español', 'short_name' => 'Spanish'],
+    'sq' => ['full_name' => 'Albanian - Shqip', 'short_name' => 'Albanian'],
+    'hi' => ['full_name' => 'Hindi - हिंदी', 'short_name' => 'Hindi'],
+    'nl' => ['full_name' => 'Dutch', 'short_name' => 'Dutch'],
+    'fr' => ['full_name' => 'French - Français', 'short_name' => 'French'],
+    'de' => ['full_name' => 'German - Deutsch', 'short_name' => 'German'],
+    'ar' => ['full_name' => 'Arabic - العَرَبِيَّة', 'short_name' => 'Arabic'],
+    'tr' => ['full_name' => 'Turkish - Türkçe', 'short_name' => 'Turkish'],
+    'id' => ['full_name' => 'Indonesian', 'short_name' => 'Indonesian'],
+    'ps' => ['full_name' => 'Pashto', 'short_name' => 'Pashto'],
+    'pt' => ['full_name' => 'Portuguese', 'short_name' => 'Portuguese'],
+    'vi' => ['full_name' => 'Vietnamese', 'short_name' => 'Vietnamese'],
+    'ce' => ['full_name' => 'Chinese', 'short_name' => 'Chinese'],
+    'ro' => ['full_name' => 'Romanian', 'short_name' => 'Romanian'],
+    'lo' => ['full_name' => 'Lao', 'short_name' => 'Lao'],
+],
+```
+
+
+**Note:**
+
+  * This implementation uses the existing 
+```text
+langs
+```
+ key (not 
+```text
+supported_languages
+```
+)
+  * Flag codes are defined in the view template (Step 7) for better separation of concerns
+
+
+
+## Step 2: Add Flag Icons CSS​
+
+Add the Flag Icons CSS library to your layout.
+
+### File: 
+```text
+resources/views/layouts/partials/css.blade.php
+```
+​
+
+
+```text
+{{-- Flag Icons for Language Switcher --}}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.0.0/css/flag-icons.min.css"/>
+```
+
+
+## Step 3: Create Language Middleware​
+
+Create middleware to automatically set the application locale based on the user's language preference stored in the session.
+
+### Generate Middleware​
+
+
+```text
+php artisan make:middleware Language
+```
+
+
+### File: 
+```text
+app/Http/Middleware/Language.php
+```
+​
+
+
+```php
+<?php
+
+namespace App\Http\Middleware;
+
+use App;
+use Closure;
+
+class Language
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure  $next
+     * @return mixed
+     */
+    public function handle($request, Closure $next)
+    {
+        $locale = config('app.locale');
+        if ($request->session()->has('user.language')) {
+            $locale = $request->session()->get('user.language');
+        }
+        App::setLocale($locale);
+
+        return $next($request);
+    }
+}
+```
+
+
+**Key Points:**
+
+  * Gets language from session 
+```text
+user.language
+```
+
+  * Falls back to 
+```text
+config('app.locale')
+```
+ if not set
+  * Sets the application locale for the current request
+
+
+
+## Step 4: Register Middleware​
+
+Register the middleware in your HTTP Kernel.
+
+### File: 
+```text
+app/Http/Kernel.php
+```
+​
+
+
+```javascript
+protected $middlewareGroups = [
+    'web' => [
+        \App\Http\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        // ... other middleware
+        \App\Http\Middleware\Language::class, // Add this line
+        // ... other middleware
+    ],
+];
+```
+
+
+Or add it to your route groups as shown in 
+```text
+routes/web.php:101
+```
+:
+
+
+```text
+Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu', 'CheckUserLogin'])->group(function () {
+    // Your routes here
+});
+```
+
+
+## Step 5: Add Controller Method​
+
+Add a method to handle language updates in your user management controller.
+
+### File: 
+```text
+app/Http/Controllers/ManageUserController.php
+```
+​
+
+
+```php
+/**
+ * Change user's language preference
+ *
+ * @param  \Illuminate\Http\Request  $request
+ * @return \Illuminate\Http\Response
+ */
+public function changeLanguage(Request $request)
+{
+    try {
+        // Get supported languages from config
+        $supportedLanguages = array_keys(config('constants.langs', []));
+
+        // Validate the language
+        $request->validate([
+            'language' => ['required', 'string', \Illuminate\Validation\Rule::in($supportedLanguages)]
+        ]);
+
+        $user = auth()->user();
+        $language = $request->input('language');
+
+        // Update user's language preference in database
+        $user->update(['language' => $language]);
+
+        // Update session language
+        session(['user.language' => $language]);
+
+        // Set app locale for immediate effect
+        app()->setLocale($language);
+
+        return redirect()
+            ->back()
+            ->with('status', ['success' => 1, 'msg' => __('lang_v1.language_changed_successfully')]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error changing language: ' . $e->getMessage());
+
+        return redirect()
+            ->back()
+            ->with('status', ['success' => 0, 'msg' => __('lang_v1.something_went_wrong')]);
+    }
+}
+```
+
+
+**Key Features:**
+
+  * Validates language against supported languages from config
+  * Updates user's language in database
+  * Updates session 
+```text
+user.language
+```
+
+  * Sets app locale for immediate effect
+  * Redirects back with status message
+
+
+
+## Step 6: Add Route​
+
+Add a route for the language change endpoint.
+
+### File: 
+```text
+routes/web.php
+```
+​
+
+
+```text
+// Language change route
+Route::post('/change-language', [ManageUserController::class, 'changeLanguage'])
+    ->name('change.language');
+```
+
+
+## Step 7: Create Language Dropdown​
+
+Add the language dropdown to your header with flag mapping defined in the view.
+
+### File: 
+```text
+resources/views/layouts/partials/header.blade.php
+```
+​
+
+
+```javascript
+{{-- Language Selector --}}
+<details class="tw-dw-dropdown tw-relative tw-inline-block tw-text-left">
+    <summary
+        class="tw-inline-flex tw-transition-all tw-ring-1 tw-ring-white/10 hover:tw-text-white tw-cursor-pointer tw-duration-200 tw-bg-primary-800 hover:tw-bg-primary-700 tw-py-1.5 tw-px-3 tw-rounded-lg tw-items-center tw-justify-center tw-text-sm tw-font-medium tw-text-white tw-gap-1">
+        @php
+            $currentLang = session()->get('user.language', auth()->user()->language ?? config('app.locale', 'en'));
+            $supportedLanguages = config('constants.langs', []);
+
+            // Flag mapping for CSS classes (using flag-icons library)
+            $flagMapping = [
+                'en' => 'us', // English -> United States flag
+                'es' => 'es', // Spanish
+                'sq' => 'al', // Albanian -> Albania flag
+                'hi' => 'in', // Hindi -> India flag
+                'nl' => 'nl', // Dutch
+                'fr' => 'fr', // French
+                'de' => 'de', // German
+                'ar' => 'sa', // Arabic -> Saudi Arabia flag
+                'tr' => 'tr', // Turkish
+                'id' => 'id', // Indonesian
+                'ps' => 'af', // Pashto -> Afghanistan flag
+                'pt' => 'pt', // Portuguese
+                'vi' => 'vn', // Vietnamese
+                'ce' => 'cn', // Chinese -> China flag
+                'ro' => 'ro', // Romanian
+                'lo' => 'la', // Lao -> Laos flag
+            ];
+
+            // Build languages array with flags
+            $languages = [];
+            foreach ($supportedLanguages as $langCode => $langData) {
+                $languages[$langCode] = [
+                    'name' => $langData['short_name'],
+                    'full_name' => $langData['full_name'],
+                    'flag_code' => $flagMapping[$langCode] ?? 'un' // Default to UN flag
+                ];
+            }
+
+            $currentLanguage = $languages[$currentLang] ?? $languages['en'] ?? ['name' => 'English', 'flag_code' => 'us'];
+        @endphp
+
+        {{-- Current Language Flag --}}
+        <span class="fi fi-{{ $currentLanguage['flag_code'] }} tw-text-lg tw-mr-2"></span>
+        <span class="tw-hidden sm:tw-block tw-text-sm tw-font-medium">{{ $currentLanguage['name'] }}</span>
+        <svg class="tw-w-4 tw-h-4 tw-ml-1" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        </svg>
+    </summary>
+
+    {{-- Language Dropdown menu --}}
+    <ul class="tw-p-2 tw-w-52 tw-absolute tw-right-0 tw-z-10 tw-mt-2 tw-origin-top-right tw-bg-white dark:tw-bg-gray-800 tw-rounded-lg tw-shadow-lg tw-ring-1 tw-ring-gray-200 dark:tw-ring-gray-700 focus:tw-outline-none"
+         role="menu" tabindex="-1">
+        <div class="tw-px-4 tw-py-3 tw-border-b tw-border-gray-200 dark:tw-border-gray-700">
+            <p class="tw-text-sm tw-text-gray-900 dark:tw-text-white tw-font-medium">@lang('lang_v1.select_language')</p>
+        </div>
+        <div class="tw-py-2">
+            @foreach($languages as $langCode => $langData)
+            <li>
+                <a href="#"
+                   onclick="event.preventDefault(); changeLanguage('{{ $langCode }}');"
+                   class="tw-flex tw-items-center tw-px-4 tw-py-2 tw-text-sm tw-text-gray-700 hover:tw-bg-gray-100 dark:tw-text-gray-200 dark:hover:tw-bg-gray-600 dark:hover:tw-text-white {{ $currentLang === $langCode ? 'tw-bg-blue-50 dark:tw-bg-blue-900 tw-text-blue-700 dark:tw-text-blue-300' : '' }}">
+                    <span class="fi fi-{{ $langData['flag_code'] }} tw-text-lg tw-mr-3"></span>
+                    <span>{{ $langData['name'] }}</span>
+                    @if($currentLang === $langCode)
+                    <svg class="tw-w-4 tw-h-4 tw-ml-auto tw-text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    @endif
+                </a>
+            </li>
+            @endforeach
+        </div>
+    </ul>
+</details>
+```
+
+
+**Key Features:**
+
+  * Gets current language from session, user model, or falls back to app locale
+  * Loads languages from 
+```text
+config('constants.langs')
+```
+
+  * Defines flag mapping locally for better separation of concerns
+  * Combines config data with flag codes to build complete languages array
+  * Uses flag-icons library CSS classes (
+```text
+fi fi-{country_code}
+```
+)
+  * Highlights currently selected language
+  * Calls JavaScript 
+```text
+changeLanguage()
+```
+ function on click
+
+
+
+## Step 8: Add JavaScript Handler​
+
+Add JavaScript to handle the language change functionality.
+
+### File: 
+```text
+resources/views/layouts/partials/javascripts.blade.php
+```
+​
+
+
+```javascript
+/**
+ * Change language via form submission
+ * @param {string} langCode - Language code to switch to
+ */
+function changeLanguage(langCode) {
+    try {
+        // Show loading indicator if Swal is available
+        if (window.Swal) {
+            window.Swal.fire({
+                title: 'Changing Language...',
+                text: 'Please wait while we update your language preference.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                allowEnterKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    window.Swal.showLoading();
+                }
+            });
+        }
+
+        // Validate CSRF token exists
+        const csrfMetaTag = document.querySelector('meta[name="csrf-token"]');
+        if (!csrfMetaTag) {
+            console.error('CSRF token meta tag not found');
+            if (window.Swal) {
+                window.Swal.fire('Error', 'Security token not found. Please refresh the page and try again.', 'error');
+            }
+            return;
+        }
+
+        // Create form and submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ route("change.language") }}';
+
+        // Add CSRF token
+        const csrfToken = document.createElement('input');
+        csrfToken.type = 'hidden';
+        csrfToken.name = '_token';
+        csrfToken.value = csrfMetaTag.getAttribute('content');
+        form.appendChild(csrfToken);
+
+        // Add language parameter
+        const langInput = document.createElement('input');
+        langInput.type = 'hidden';
+        langInput.name = 'language';
+        langInput.value = langCode;
+        form.appendChild(langInput);
+
+        // Submit form
+        document.body.appendChild(form);
+        form.submit();
+    } catch (error) {
+        console.error('Error changing language:', error);
+        if (window.Swal) {
+            window.Swal.fire('Error', 'An error occurred while changing language. Please try again.', 'error');
+        }
+    }
+}
+```
+
+
+**Key Features:**
+
+  * Shows loading indicator using SweetAlert2
+  * Validates CSRF token exists
+  * Creates dynamic form with CSRF token and language parameter
+  * Submits to 
+```text
+change.language
+```
+ route
+  * Error handling with user feedback
+
+
+
+## Step 9: Add Translation Keys​
+
+Add the required translation keys to all language files.
+
+### Files: 
+```text
+lang/*/lang_v1.php
+```
+ (for each language)​
+
+Add these two keys before the closing 
+```text
+];
+```
+ in each language file:
+
+
+```javascript
+// English (lang/en/lang_v1.php)
+'select_language' => 'Select Language',
+'language_changed_successfully' => 'Language changed successfully',
+
+// Spanish (lang/es/lang_v1.php)
+'select_language' => 'Seleccionar idioma',
+'language_changed_successfully' => 'Idioma cambiado exitosamente',
+
+// Arabic (lang/ar/lang_v1.php)
+'select_language' => 'اختر اللغة',
+'language_changed_successfully' => 'تم تغيير اللغة بنجاح',
+
+// And so on for all other languages...
+```
+
+
+**Required translations for all 16 languages:**
+
+  * English (en): "Select Language", "Language changed successfully"
+  * Spanish (es): "Seleccionar idioma", "Idioma cambiado exitosamente"
+  * Arabic (ar): "اختر اللغة", "تم تغيير اللغة بنجاح"
+  * French (fr): "Sélectionner la langue", "Langue changée avec succès"
+  * German (de): "Sprache auswählen", "Sprache erfolgreich geändert"
+  * Turkish (tr): "Dil Seç", "Dil başarıyla değiştirildi"
+  * Portuguese (pt): "Selecionar idioma", "Idioma alterado com sucesso"
+  * Dutch (nl): "Selecteer taal", "Taal succesvol gewijzigd"
+  * Indonesian (id): "Pilih Bahasa", "Bahasa berhasil diubah"
+  * Hindi (hi): "भाषा चुनें", "भाषा सफलतापूर्वक बदली गई"
+  * Vietnamese (vi): "Chọn ngôn ngữ", "Đã thay đổi ngôn ngữ thành công"
+  * Romanian (ro): "Selectați limba", "Limba schimbată cu succes"
+  * Albanian (sq): "Zgjidhni gjuhën", "Gjuha u ndryshua me sukses"
+  * Pashto (ps): "ژبه وټاکئ", "ژبه په بریالیتوب سره بدله شوه"
+  * Chinese (ce): "选择语言", "语言更改成功"
+  * Lao (lo): "ເລືອກພາສາ", "ປ່ຽນພາສາສໍາເລັດແລ້ວ"
+
+
+
+## Step 10: Clear Caches​
+
+Clear your application caches to ensure all changes take effect:
+
+
+```text
+php artisan config:cache
+php artisan view:clear
+php artisan route:clear
+```
+
+
+## Testing​
+
+  1. **Login** to your application
+  2. **Click** the language dropdown in the header
+  3. **Select** a different language
+  4. **Verify** the page reloads in the new language
+  5. **Check** that the language preference persists after logout/login
+
+
+
+## Implementation Differences from Other Approaches​
+
+This implementation differs from some common approaches:
+
+  1. **Flag Mapping in View** : Flag codes are defined in the view template rather than stored in the config file. This provides:
+
+     * Better separation of concerns (display logic stays in view)
+     * Easier to update flag mappings without touching config
+     * Config file remains focused on language data
+  2. **Session-Based Language Storage** : Uses 
+```text
+user.language
+```
+ in session:
+
+     * Language is set from user's database field on login
+     * Middleware reads from session for each request
+     * More efficient than querying database on every request
+  3. **Form Submission** : Uses actual form submission instead of AJAX:
+
+     * More reliable for language changes
+     * Ensures full page reload with new language
+     * Simpler error handling
+
+
+
+## Customization​
+
+### Adding New Languages​
+
+  1. Add language files to 
+```text
+lang/
+```
+ directory
+  2. Update 
+```text
+config/constants.php
+```
+ 
+```text
+langs
+```
+ array
+  3. Add corresponding flag code to 
+```text
+$flagMapping
+```
+ array in header template
+  4. Add the translation keys to all 
+```text
+lang/*/lang_v1.php
+```
+ files: 
+     * 
+```text
+'select_language'
+```
+ - Translated "Select Language"
+     * 
+```text
+'language_changed_successfully'
+```
+ - Translated "Language changed successfully"
+  5. Add JavaScript language files if needed to 
+```text
+public/js/lang/
+```
+
+
+
+
+### Styling​
+
+Modify the Tailwind CSS classes in the header template to match your application's design system.
+
+### Flag Sources​
+
+The implementation uses the Flag Icons CSS library. You can also use:
+
+  * Local flag images
+  * Different flag icon libraries
+  * Custom SVG flags
+
+
+
+## Troubleshooting​
+
+### Language Not Changing​
+
+  * Check middleware is registered correctly in route groups
+  * Verify language files exist in 
+```text
+lang/
+```
+ directory
+  * Ensure session is working properly
+  * Check browser console for JavaScript errors
+
+
+
+### Flags Not Displaying​
+
+  * Verify Flag Icons CSS is loaded
+  * Check flag codes match the library format (2-letter country codes)
+  * Ensure internet connection for CDN
+  * Inspect browser network tab for failed CSS requests
+
+
+
+### Database Errors​
+
+  * Verify users table has 
+```text
+language
+```
+ column
+  * Check column type allows sufficient length (VARCHAR(5) recommended)
+  * Ensure database permissions are correct
+
+
+
+### Session Issues​
+
+  * Verify session driver is configured properly in 
+```text
+.env
+```
+
+  * Check session lifetime settings
+  * Clear session cache: 
+```text
+php artisan cache:clear
+```
+
+
+
+
+## Conclusion​
+
+You now have a fully functional user-specific language dropdown with country flags that:
+
+  * Allows each user to set their preferred language
+  * Saves preferences to the database
+  * Automatically applies language across the application via middleware
+  * Uses beautiful country flag icons from flag-icons library
+  * Provides a professional, responsive interface
+  * Separates display logic (flag codes) from data (language names)
+
+
+
+The implementation is scalable and can easily accommodate additional languages as your application grows.
+
+## File References​
+
+  * Config: 
+```text
+config/constants.php:34-51
+```
+
+  * CSS: 
+```text
+resources/views/layouts/partials/css.blade.php:3
+```
+
+  * Middleware: 
+```text
+app/Http/Middleware/Language.php
+```
+
+  * Controller: 
+```text
+app/Http/Controllers/ManageUserController.php:475-509
+```
+
+  * Route: 
+```text
+routes/web.php:249-250
+```
+
+  * View: 
+```text
+resources/views/layouts/partials/header.blade.php:194-267
+```
+
+  * JavaScript: 
+```text
+resources/views/layouts/partials/javascripts.blade.php:224
+```
+ (changeLanguage function)
+
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)

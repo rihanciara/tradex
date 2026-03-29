@@ -1,0 +1,1271 @@
+---
+title: "Sub-Unit Prices"
+sidebar_label: "Sub-Unit Prices"
+slug: /sub-unit-prices-sub-unit-prices-ultimate-pos-tutorials-23_10_2025-18-58-50
+hide_title: true
+toc: false
+---
+
+# Sub-Unit Prices Implementation Guide
+
+**By Simenson Technologies Ltd**
+
+This guide provides step-by-step instructions for implementing sub-unit pricing functionality in a Laravel-based POS application. Sub-unit pricing allows products to have different fixed prices when sold in different units (e.g., piece, box, carton).
+
+## Table of Contents​
+
+  1. Overview
+  2. Prerequisites
+  3. Step 1: Database Migration
+  4. Step 2: Model Configuration
+  5. Step 3: Backend Logic (ProductUtil)
+  6. Step 4: Controller Changes
+  7. Step 5: Frontend Views
+  8. Step 6: POS Integration
+  9. Step 7: Testing
+  10. Variation-Level Sub-Unit Prices (Optional)
+
+
+
+* * *
+
+## Overview​
+
+### What are Sub-Unit Prices?​
+
+Sub-unit prices allow you to set fixed selling prices for different units of measurement. For example:
+
+  * A product's default price might be $5 per piece
+  * But when sold by the box (12 pieces), you want to charge $50 (not $60)
+  * When sold by the carton (10 boxes), you want to charge $450 (not $500)
+
+
+
+This feature is stored as a JSON field on the 
+```text
+products
+```
+ table and optionally on the 
+```text
+variations
+```
+ table.
+
+### Architecture​
+
+  * **Storage** : 
+```text
+products.sub_unit_prices
+```
+ (JSON) stores 
+```text
+{unit_id: price}
+```
+ pairs
+  * **Model** : Laravel automatically casts JSON to array using 
+```text
+$casts
+```
+
+  * **Retrieval** : 
+```text
+ProductUtil::getDetailsFromVariation()
+```
+ returns product with sub-unit prices
+  * **Display** : Views render sub-unit dropdowns with 
+```text
+data-sub_unit_price
+```
+ attributes
+  * **Processing** : POS/transaction logic reads sub-unit prices when calculating line totals
+
+
+
+* * *
+
+## Prerequisites​
+
+Before implementing sub-unit prices, ensure:
+
+  1. Your application has a 
+```text
+units
+```
+ table with unit definitions
+  2. Products can have 
+```text
+unit_id
+```
+ (primary unit) and optionally 
+```text
+secondary_unit_id
+```
+
+  3. Sub-units are already configured (relationships between units, e.g., 1 box = 12 pieces)
+  4. You have a method to retrieve sub-units for a product (e.g., 
+```text
+ProductUtil::getSubUnits()
+```
+)
+
+
+
+* * *
+
+## Step 1: Database Migration​
+
+### Migration 1: Add 
+```text
+sub_unit_ids
+```
+ Column​
+
+This column stores which sub-units are available for the product.
+
+Create migration:
+
+
+```text
+php artisan make:migration add_sub_unit_columns_to_products --table=products
+```
+
+
+**File** : 
+```text
+database/migrations/2025_10_06_000001_add_sub_unit_columns_to_products.php
+```
+
+
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('products', function (Blueprint $table) {
+            if (!Schema::hasColumn('products', 'sub_unit_ids')) {
+                $table->json('sub_unit_ids')->nullable()->after('secondary_unit_id');
+            }
+            if (!Schema::hasColumn('products', 'sub_unit_prices')) {
+                $table->json('sub_unit_prices')->nullable()->after('sub_unit_ids');
+            }
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('products', function (Blueprint $table) {
+            if (Schema::hasColumn('products', 'sub_unit_prices')) {
+                $table->dropColumn('sub_unit_prices');
+            }
+            if (Schema::hasColumn('products', 'sub_unit_ids')) {
+                $table->dropColumn('sub_unit_ids');
+            }
+        });
+    }
+};
+```
+
+
+### Migration 2: Add 
+```text
+sub_unit_prices
+```
+ Column (Alternative)​
+
+If you already have 
+```text
+sub_unit_ids
+```
+ and only need to add prices:
+
+**File** : 
+```text
+database/migrations/2025_10_05_121933_add_sub_unit_prices_to_products_table.php
+```
+
+
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddSubUnitPricesToProductsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::table('products', function (Blueprint $table) {
+            $table->json('sub_unit_prices')->nullable()->after('sub_unit_ids');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::table('products', function (Blueprint $table) {
+            $table->dropColumn('sub_unit_prices');
+        });
+    }
+}
+```
+
+
+### Run Migrations​
+
+
+```text
+php artisan migrate
+```
+
+
+Verify the columns exist:
+
+
+```javascript
+php artisan tinker
+>>> Schema::hasColumn('products', 'sub_unit_prices')
+=> true
+```
+
+
+* * *
+
+## Step 2: Model Configuration​
+
+### Update Product Model​
+
+Add JSON casting for the new columns.
+
+**File** : 
+```text
+app/Product.php
+```
+
+
+
+```javascript
+<?php
+
+namespace App;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Product extends Model
+{
+    protected $guarded = ['id'];
+
+    /**
+     * The attributes that should be cast to native types.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'sub_unit_ids' => 'array',
+        'sub_unit_prices' => 'array',
+    ];
+
+    // ... rest of your model code
+}
+```
+
+
+**Why cast to array?**
+
+  * Laravel automatically converts JSON strings to PHP arrays when accessing
+  * When saving, arrays are automatically converted back to JSON
+  * This prevents issues with accessing 
+```text
+$product->sub_unit_prices[$unit_id]
+```
+
+
+
+
+* * *
+
+## Step 3: Backend Logic (ProductUtil)​
+
+### Ensure Sub-Unit Prices Are Decoded​
+
+When using database queries with joins (not Eloquent models), JSON fields might be returned as strings. Add defensive decoding.
+
+**File** : 
+```text
+app/Utils/ProductUtil.php
+```
+
+
+Find the method 
+```text
+getDetailsFromVariation()
+```
+ and ensure it includes:
+
+
+```php
+public function getDetailsFromVariation($variation_id, $business_id, $location_id = null,
+    $check_qty = true, $user = null, $check_enable_stock = true)
+{
+    // ... existing query code that selects p.sub_unit_prices ...
+
+    $query = Variation::join('products as p', 'variations.product_id', '=', 'p.id')
+        ->join('product_variations as pv', 'variations.product_variation_id', '=', 'pv.id')
+        // ... other joins ...
+        ->select(
+            // ... other fields ...
+            'p.sub_unit_prices',
+            // ... other fields ...
+        )
+        ->where('variations.id', $variation_id);
+
+    $product = $query->firstOrFail();
+
+    // IMPORTANT: Decode JSON string to array when using raw queries
+    if (isset($product->sub_unit_prices) && is_string($product->sub_unit_prices)) {
+        $decoded = json_decode($product->sub_unit_prices, true);
+        $product->sub_unit_prices = is_array($decoded) ? $decoded : [];
+    }
+
+    // ... rest of the method
+
+    return $product;
+}
+```
+
+
+### Add Price Calculation Logic​
+
+Ensure sub-unit prices override multiplier-based calculations when set.
+
+**File** : 
+```text
+app/Utils/ProductUtil.php
+```
+
+
+Find or add to the method that calculates sell prices based on sub-units:
+
+
+```php
+public function calculateSubUnitSellPrice($sell_line, $sub_unit_id)
+{
+    // Check for fixed price for sub unit and return early
+    $sub_unit_price_data = $sell_line->product->sub_unit_prices;
+    if (!empty($sub_unit_price_data[$sub_unit_id])) {
+        $sell_line->sell_price_inc_tax = $sub_unit_price_data[$sub_unit_id];
+        return $sell_line;
+    }
+
+    // Otherwise, use multiplier-based calculation
+    // ... existing multiplier logic ...
+
+    return $sell_line;
+}
+```
+
+
+* * *
+
+## Step 4: Controller Changes​
+
+### ProductController - Store Method​
+
+Handle saving sub-unit prices when creating a product.
+
+**File** : 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+
+In the 
+```text
+store()
+```
+ method:
+
+
+```php
+public function store(Request $request)
+{
+    try {
+        $business_id = $request->session()->get('user.business_id');
+
+        // ... existing validation and product creation code ...
+
+        // Prepare product details array
+        $product_details = [
+            'name' => $request->input('name'),
+            'business_id' => $business_id,
+            // ... other fields ...
+            'sub_unit_ids' => !empty($request->input('sub_unit_ids'))
+                ? $request->input('sub_unit_ids')
+                : null,
+        ];
+
+        // Handle sub-unit prices
+        if (!empty($request->input('product_sub_unit_prices'))) {
+            $sub_unit_prices = [];
+            foreach ($request->input('product_sub_unit_prices') as $unit_id => $price) {
+                if (!empty($price)) {
+                    $sub_unit_prices[$unit_id] = $this->productUtil->num_uf($price);
+                }
+            }
+            // Store as array; Product model will cast to JSON when saving
+            $product_details['sub_unit_prices'] = !empty($sub_unit_prices)
+                ? $sub_unit_prices
+                : null;
+        }
+
+        $product = Product::create($product_details);
+
+        // ... rest of product creation logic ...
+
+    } catch (\Exception $e) {
+        // ... error handling ...
+    }
+}
+```
+
+
+### ProductController - Update Method​
+
+Handle updating sub-unit prices when editing a product.
+
+**File** : 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+
+In the 
+```text
+update()
+```
+ method:
+
+
+```php
+public function update(Request $request, $id)
+{
+    try {
+        $business_id = $request->session()->get('user.business_id');
+
+        // ... existing validation ...
+
+        $product = Product::where('business_id', $business_id)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        // ... update other fields ...
+
+        $product->sub_unit_ids = !empty($request->input('sub_unit_ids'))
+            ? $request->input('sub_unit_ids')
+            : null;
+
+        // Save fixed sub-unit prices
+        if (!empty($request->input('product_sub_unit_prices'))) {
+            $sub_unit_prices = [];
+            foreach ($request->input('product_sub_unit_prices') as $unit_id => $price) {
+                if (!empty($price)) {
+                    $sub_unit_prices[$unit_id] = $this->productUtil->num_uf($price);
+                }
+            }
+            $product->sub_unit_prices = !empty($sub_unit_prices)
+                ? $sub_unit_prices
+                : null;
+        } else {
+            $product->sub_unit_prices = null;
+        }
+
+        $product->save();
+
+        // ... rest of update logic ...
+
+    } catch (\Exception $e) {
+        // ... error handling ...
+    }
+}
+```
+
+
+### Add to Quick Add Export Fields (Optional)​
+
+If you support quick add or export functionality:
+
+**File** : 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+
+
+```text
+private function productExportFields()
+{
+    return [
+        'name',
+        'sku',
+        // ... other fields ...
+        'product_sub_unit_prices'
+    ];
+}
+```
+
+
+* * *
+
+## Step 5: Frontend Views​
+
+### Product Create/Edit Form​
+
+Add UI to select sub-units and enter fixed prices.
+
+**File** : 
+```text
+resources/views/product/create.blade.php
+```
+ and 
+```text
+resources/views/product/edit.blade.php
+```
+
+
+Add this section after the sub-unit selection dropdown:
+
+
+```javascript
+<div class="col-sm-4 @if(!session('business.enable_sub_units')) hide @endif">
+    <div class="form-group">
+        {!! Form::label('sub_unit_ids', __('lang_v1.related_sub_units') . ':') !!}
+        @show_tooltip(__('lang_v1.sub_units_tooltip'))
+
+        {!! Form::select('sub_unit_ids[]', [],
+            !empty($product->sub_unit_ids) ? $product->sub_unit_ids : null,
+            ['class' => 'form-control select2', 'multiple', 'id' => 'sub_unit_ids']); !!}
+    </div>
+</div>
+
+<div class="col-sm-12">
+    <div id="sub_unit_prices_div" class="hide">
+        <br>
+        <div class="table-responsive">
+            <table class="table table-bordered add-product-price-table table-condensed">
+                <thead>
+                    <tr>
+                        <th>@lang('lang_v1.related_sub_units')</th>
+                        <th>@lang('product.selling_price') (@lang('product.inc_of_tax'))</th>
+                    </tr>
+                </thead>
+                <tbody id="sub_unit_prices_body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+```
+
+
+### JavaScript to Populate Sub-Unit Price Inputs​
+
+Add this script at the bottom of 
+```text
+create.blade.php
+```
+ and 
+```text
+edit.blade.php
+```
+:
+
+
+```javascript
+@section('javascript')
+<script src="{{ asset('js/product.js?v=' . $asset_v) }}"></script>
+
+<script type="text/javascript">
+$(document).ready(function(){
+    // Helper to return localized inc/ex label depending on selected tax type
+    function getSubUnitPriceSuffix() {
+        var taxType = $('select[name="tax_type"]').val();
+        return taxType === 'inclusive' ? '@lang('product.inc_of_tax')' : '@lang('product.exc_of_tax')';
+    }
+
+    function updateSubUnitPriceHeader() {
+        var suffix = getSubUnitPriceSuffix();
+        $('#sub_unit_prices_div').find('table thead th').eq(1).html("@lang('product.selling_price') (" + suffix + ")");
+    }
+
+    // Update placeholders of existing inputs
+    function updateSubUnitPlaceholders() {
+        var suffix = getSubUnitPriceSuffix();
+        $('#sub_unit_prices_body').find('input').each(function() {
+            $(this).attr('placeholder', "@lang('product.selling_price') (" + suffix + ")");
+        });
+    }
+
+    // Hook tax type change to update header/placeholders
+    $('select[name="tax_type"]').on('change', function() {
+        updateSubUnitPriceHeader();
+        updateSubUnitPlaceholders();
+    });
+
+    // Initialize header on load
+    updateSubUnitPriceHeader();
+
+    $('select#sub_unit_ids').on('change', function() {
+        var sub_unit_prices_div = $('#sub_unit_prices_div');
+        var sub_unit_prices_body = $('#sub_unit_prices_body');
+        sub_unit_prices_body.empty();
+
+        if ($(this).val() && $(this).val().length > 0) {
+            sub_unit_prices_div.removeClass('hide');
+            $(this).find('option:selected').each(function() {
+                var unit_id = $(this).val();
+                var unit_name = $(this).text();
+                var suffix = getSubUnitPriceSuffix();
+
+                @if(!empty($product->sub_unit_prices))
+                var existing_price = {!! json_encode($product->sub_unit_prices) !!}[unit_id] || '';
+                @else
+                var existing_price = '';
+                @endif
+
+                var new_row = `
+                    <tr>
+                        <td>${unit_name}</td>
+                        <td>
+                            <input type="text"
+                                   name="product_sub_unit_prices[${unit_id}]"
+                                   class="form-control input_number"
+                                   placeholder="@lang('product.selling_price') (${suffix})"
+                                   value="${existing_price}">
+                        </td>
+                    </tr>
+                `;
+                sub_unit_prices_body.append(new_row);
+            });
+            __currency_convert_recursively(sub_unit_prices_body);
+        } else {
+            sub_unit_prices_div.addClass('hide');
+        }
+    });
+
+    // Trigger change on page load to populate existing data
+    @if(!empty($product->sub_unit_ids))
+    $('select#sub_unit_ids').trigger('change');
+    @endif
+});
+</script>
+@endsection
+```
+
+
+### Product Details View​
+
+Display sub-unit prices in the product details modal/page.
+
+**File** : 
+```text
+resources/views/product/partials/single_product_details.blade.php
+```
+
+
+After displaying the selling price:
+
+
+```javascript
+<td>
+    <span class="display_currency" data-currency_symbol="true">
+        {{ $variation->sell_price_inc_tax }}
+    </span>
+
+    @php
+        $business_id = session()->get('user.business_id');
+        $sub_units = app(\App\Utils\ProductUtil::class)->getSubUnits($business_id, $product->unit_id, true, $product->id);
+        $sub_unit_prices = $product->sub_unit_prices ?? [];
+    @endphp
+
+    @if(!empty($sub_unit_prices) && count($sub_unit_prices) > 0)
+        <br>
+        <small class="text-muted">
+        @foreach($sub_units as $u_id => $u)
+            @if(isset($sub_unit_prices[$u_id]) && $sub_unit_prices[$u_id] !== null && $sub_unit_prices[$u_id] !== '')
+                <strong>{{ $u['name'] }}</strong>:
+                <span class="display_currency" data-currency_symbol="true">
+                    {{ $sub_unit_prices[$u_id] }}
+                </span>@if(!$loop->last), @endif
+            @endif
+        @endforeach
+        </small>
+    @endif
+</td>
+```
+
+
+* * *
+
+## Step 6: POS Integration​
+
+### POS Product Row​
+
+Update the POS product row to include sub-unit prices in data attributes.
+
+**File** : 
+```text
+resources/views/sale_pos/product_row.blade.php
+```
+
+
+In the sub-unit dropdown:
+
+
+```javascript
+<input type="hidden" name="products[{{$row_count}}][product_unit_id]" value="{{$product->unit_id}}">
+
+@if(count($sub_units) > 0)
+    <br>
+    <select name="products[{{$row_count}}][sub_unit_id]" class="form-control input-sm sub_unit">
+        @foreach($sub_units as $key => $value)
+            <option value="{{$key}}"
+                    data-multiplier="{{$value['multiplier']}}"
+                    data-unit_name="{{$value['name']}}"
+                    data-allow_decimal="{{$value['allow_decimal']}}"
+                    data-sub_unit_price="{{ isset($product->sub_unit_prices[$key]) ? (float)$product->sub_unit_prices[$key] : '' }}"
+                    @if(!empty($product->sub_unit_id) && $product->sub_unit_id == $key) selected @endif>
+                {{ $value['name'] }}
+            </option>
+        @endforeach
+    </select>
+@endif
+```
+
+
+**Important** : Cast to 
+```text
+(float)
+```
+ to ensure JavaScript receives a numeric string, not a JSON-encoded value.
+
+### JavaScript to Handle Sub-Unit Selection​
+
+**File** : 
+```text
+public/js/pos.js
+```
+ or inline in POS view:
+
+
+```javascript
+$(document).on('change', 'select.sub_unit', function() {
+    var $row = $(this).closest('tr');
+    var selected_option = $(this).find('option:selected');
+    var sub_unit_price = selected_option.data('sub_unit_price');
+
+    if (sub_unit_price && sub_unit_price !== '') {
+        // Use fixed sub-unit price
+        $row.find('input.pos_unit_price_inc_tax').val(sub_unit_price);
+        pos_each_row($row); // Recalculate row totals
+    } else {
+        // Use multiplier-based calculation
+        var multiplier = parseFloat(selected_option.data('multiplier')) || 1;
+        var base_price = parseFloat($row.find('input.base_unit_sell_price').val()) || 0;
+        var unit_price = base_price * multiplier;
+        $row.find('input.pos_unit_price_inc_tax').val(unit_price);
+        pos_each_row($row); // Recalculate row totals
+    }
+});
+```
+
+
+* * *
+
+## Step 7: Testing​
+
+### Manual Testing Checklist​
+
+  1. **Create Product with Sub-Unit Prices**
+
+     * Create a new product
+     * Set base unit (e.g., Piece)
+     * Select sub-units (e.g., Box, Carton)
+     * Enter fixed prices for each sub-unit
+     * Save and verify database entry
+  2. **Verify Database Storage**
+
+
+```javascript
+php artisan tinker
+>>> $product = App\Product::find(1);
+>>> $product->sub_unit_prices
+=> [
+     "2" => "50.00",
+     "3" => "450.00"
+   ]
+```
+
+
+  3. **Edit Product Sub-Unit Prices**
+
+     * Edit an existing product
+     * Modify sub-unit prices
+     * Save and verify changes persist
+  4. **POS Transaction**
+
+     * Open POS
+     * Add product to cart
+     * Change sub-unit dropdown
+     * Verify price updates to fixed sub-unit price (not multiplier-based)
+     * Complete sale and check transaction details
+  5. **Product Details View**
+
+     * View product details modal
+     * Verify sub-unit prices are displayed correctly
+
+
+
+### Unit Test Example​
+
+**File** : 
+```text
+tests/Feature/SubUnitPriceTest.php
+```
+
+
+
+```php
+<?php
+
+namespace Tests\Feature;
+
+use Tests\TestCase;
+use App\Product;
+use App\Business;
+use App\User;
+
+class SubUnitPriceTest extends TestCase
+{
+    public function test_product_stores_sub_unit_prices()
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $response = $this->post('/products', [
+            'name' => 'Test Product',
+            'type' => 'single',
+            'unit_id' => 1,
+            'sub_unit_ids' => [2, 3],
+            'product_sub_unit_prices' => [
+                2 => '50.00',
+                3 => '450.00'
+            ],
+            // ... other required fields
+        ]);
+
+        $response->assertStatus(200);
+
+        $product = Product::where('name', 'Test Product')->first();
+        $this->assertNotNull($product->sub_unit_prices);
+        $this->assertEquals('50.00', $product->sub_unit_prices[2]);
+        $this->assertEquals('450.00', $product->sub_unit_prices[3]);
+    }
+}
+```
+
+
+* * *
+
+## Variation-Level Sub-Unit Prices (Optional)​
+
+If you need different sub-unit prices per variation (e.g., Red Box costs $50, Blue Box costs $55), follow these additional steps.
+
+### 1\. Migration for Variations Table​
+
+
+```text
+php artisan make:migration add_sub_unit_prices_to_variations --table=variations
+```
+
+
+**File** : 
+```text
+database/migrations/YYYY_MM_DD_add_sub_unit_prices_to_variations.php
+```
+
+
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class AddSubUnitPricesToVariations extends Migration
+{
+    public function up()
+    {
+        Schema::table('variations', function (Blueprint $table) {
+            $table->json('sub_unit_prices')->nullable()->after('sell_price_inc_tax');
+        });
+    }
+
+    public function down()
+    {
+        Schema::table('variations', function (Blueprint $table) {
+            $table->dropColumn('sub_unit_prices');
+        });
+    }
+}
+```
+
+
+### 2\. Update Variation Model​
+
+**File** : 
+```text
+app/Variation.php
+```
+
+
+
+```javascript
+class Variation extends Model
+{
+    protected $casts = [
+        'sub_unit_prices' => 'array',
+        // ... other casts
+    ];
+}
+```
+
+
+### 3\. Modify ProductUtil Logic​
+
+**File** : 
+```text
+app/Utils/ProductUtil.php
+```
+
+
+In 
+```text
+getDetailsFromVariation()
+```
+, prefer variation-level prices:
+
+
+```php
+public function getDetailsFromVariation($variation_id, ...)
+{
+    // ... existing query ...
+
+    $product = $query->firstOrFail();
+
+    // Get variation
+    $variation = Variation::find($variation_id);
+
+    // Prefer variation-level sub_unit_prices when present
+    if (!empty($variation->sub_unit_prices) && is_array($variation->sub_unit_prices) && count($variation->sub_unit_prices) > 0) {
+        // Merge: variation overrides product-level
+        $product->sub_unit_prices = array_merge(
+            (array) $product->sub_unit_prices,
+            (array) $variation->sub_unit_prices
+        );
+    }
+
+    // Defensive JSON decode
+    if (isset($product->sub_unit_prices) && is_string($product->sub_unit_prices)) {
+        $decoded = json_decode($product->sub_unit_prices, true);
+        $product->sub_unit_prices = is_array($decoded) ? $decoded : [];
+    }
+
+    return $product;
+}
+```
+
+
+### 4\. Controller Changes for Variation Prices​
+
+**File** : 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+
+In 
+```text
+update()
+```
+ method, after saving variations:
+
+
+```php
+if ($request->has('variation_sub_unit_prices')) {
+    foreach ($request->input('variation_sub_unit_prices') as $variation_id => $prices) {
+        $variation = \App\Variation::find($variation_id);
+        if ($variation) {
+            $variation->sub_unit_prices = array_filter($prices, function ($v) {
+                return $v !== null && $v !== '';
+            });
+            $variation->save();
+        }
+    }
+}
+```
+
+
+### 5\. View Changes for Variation Prices​
+
+**File** : 
+```text
+resources/views/product/partials/edit_product_variation_row.blade.php
+```
+
+
+Add sub-unit price inputs per variation:
+
+
+```text
+@php $sub_units = $product->sub_unit_ids ?? []; @endphp
+@if(count($sub_units) > 0)
+    <table class="table table-condensed">
+        <thead>
+            <tr>
+                <th>Sub Unit</th>
+                <th>@lang('product.selling_price') (@lang('product.inc_of_tax'))</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach($sub_units as $unit_id)
+            @php
+                $unit = \App\Unit::find($unit_id);
+                $unit_name = $unit ? $unit->short_name : '';
+            @endphp
+            <tr>
+                <td>{{ $unit_name }}</td>
+                <td>
+                    <input type="text"
+                           name="variation_sub_unit_prices[{{ $variation->id }}][{{ $unit_id }}]"
+                           value="{{ isset($variation->sub_unit_prices[$unit_id]) ? $variation->sub_unit_prices[$unit_id] : '' }}"
+                           class="form-control input_number">
+                </td>
+            </tr>
+        @endforeach
+        </tbody>
+    </table>
+@endif
+```
+
+
+* * *
+
+## Troubleshooting​
+
+### Issue: Sub-unit prices not saving​
+
+**Check** :
+
+  1. Verify 
+```text
+$fillable
+```
+ or 
+```text
+$guarded
+```
+ in Product model allows 
+```text
+sub_unit_prices
+```
+
+  2. Check browser console for JavaScript errors
+  3. Inspect 
+```php
+$request->input('product_sub_unit_prices')
+```
+ in controller
+  4. Ensure 
+```text
+num_uf()
+```
+ method exists in your ProductUtil
+
+
+
+### Issue: Prices showing as JSON string in views​
+
+**Solution** : Ensure model has proper casting:
+
+
+```javascript
+protected $casts = [
+    'sub_unit_prices' => 'array',
+];
+```
+
+
+### Issue: POS not using sub-unit prices​
+
+**Check** :
+
+  1. Verify 
+```text
+data-sub_unit_price
+```
+ attribute is populated correctly
+  2. Check JavaScript console for errors
+  3. Ensure 
+```text
+(float)
+```
+ casting in blade: 
+```text
+data-sub_unit_price="{{ (float)$price }}"
+```
+
+  4. Verify 
+```text
+ProductUtil::getDetailsFromVariation()
+```
+ returns decoded array
+
+
+
+### Issue: Tax type mismatch (inc vs exc)​
+
+**Solution** :
+
+  * Clarify if stored prices are inclusive or exclusive
+  * Use 
+```text
+tax_type
+```
+ field to determine
+  * Convert at render time if needed using 
+```text
+ProductUtil
+```
+ tax helpers
+
+
+
+* * *
+
+## Best Practices​
+
+  1. **Always validate prices** : Use 
+```text
+num_uf()
+```
+ to unformat user input
+  2. **Defensive coding** : Check if sub_unit_prices exists and is array before accessing
+  3. **Fallback logic** : If sub-unit price not set, use multiplier calculation
+  4. **Data migration** : When adding feature to existing products, consider copying product-level prices to variations
+  5. **Clear cache** : After migration, run 
+```text
+php artisan cache:clear
+```
+ and 
+```text
+php artisan view:clear
+```
+
+  6. **Database backups** : Always backup before running migrations in production
+
+
+
+* * *
+
+## Summary​
+
+This implementation provides:
+
+  * ✅ Database schema for storing sub-unit prices (JSON)
+  * ✅ Model casting for automatic JSON ↔ array conversion
+  * ✅ Backend logic to retrieve and apply sub-unit prices
+  * ✅ Controller handling for create/update operations
+  * ✅ Frontend UI to manage sub-unit prices
+  * ✅ POS integration with dynamic pricing
+  * ✅ Optional variation-level price overrides
+
+
+
+The system is backward compatible: if no sub-unit price is set, the application falls back to multiplier-based calculations.
+
+* * *
+
+## References​
+
+  * Original implementation discussion: 
+```text
+varation patch for sub unit.md
+```
+
+  * Migrations: 
+```text
+database/migrations/2025_10_05_*.php
+```
+ and 
+```text
+2025_10_06_*.php
+```
+
+  * Product model: 
+```text
+app/Product.php
+```
+
+  * ProductUtil: 
+```text
+app/Utils/ProductUtil.php
+```
+
+  * ProductController: 
+```text
+app/Http/Controllers/ProductController.php
+```
+
+  * Views: 
+```text
+resources/views/product/create.blade.php
+```
+ and 
+```text
+sale_pos/product_row.blade.php
+```
+
+
+
+
+💛 Support this project
+
+[☕ Buy me a coffee](https://buymeacoffee.com/horizonsoft)

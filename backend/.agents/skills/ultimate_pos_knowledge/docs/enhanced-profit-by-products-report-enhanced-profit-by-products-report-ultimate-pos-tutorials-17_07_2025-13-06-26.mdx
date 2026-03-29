@@ -1,0 +1,968 @@
+---
+title: "Enhanced Profit by Products Report"
+sidebar_label: "Enhanced Profit by Products Report"
+slug: /enhanced-profit-by-products-report-enhanced-profit-by-products-report-ultimate-pos-tutorials-17_07_2025-13-06-26
+hide_title: true
+toc: false
+---
+
+# Enhanced Profit by Products Report Implementation Guide
+
+This guide will walk you through implementing enhanced columns in the Profit by Products report in Ultimate POS Laravel. The enhancement adds comprehensive financial data including current stock, quantity sold, pricing information, and total amounts.
+
+## 📁 Complete Implementation Tree​
+
+
+```text
+your-laravel-app/
+├── 📁 app/
+│   └── 📁 Http/
+│       └── 📁 Controllers/
+│           └── 📄 ReportsController.php ← UPDATE METHOD: getProfit()
+│
+├── 📁 lang/
+│   └── 📁 en/
+│       ├── 📄 lang_v1.php ← UPDATE: Translation keys
+│
+├── 📁 resources/
+│   └── 📁 views/
+│       └── 📁 report/
+│           ├── 📄 profit_loss.blade.php ← UPDATE: JavaScript DataTable config
+│           └── 📁 partials/
+│               └── 📄 profit_by_products.blade.php ← UPDATE: Table headers & columns
+```
+
+
+## Overview​
+
+The Enhanced Profit by Products Report provides a comprehensive financial analysis with the following new columns:
+
+  * **Current Stock** : Real-time inventory levels filtered by location
+  * **Quantity Sold** : Total units sold during the selected period
+  * **Selling Price** : Unit selling price (with range for variable products)
+  * **Purchase Price** : Unit purchase price (with range for variable products)
+  * **Total Sold Amount** : Total revenue generated from sales
+  * **Total Purchase Amount** : Total cost of goods sold
+  * **Gross Profit** : Net profit calculation
+
+
+
+![Enhanced Profit Report Preview](/img/docs/enhanced-profit-report-preview-1.png)
+
+## 🎯 Implementation Steps​
+
+### 1️⃣ **Backend Controller Updates**​
+
+
+```php
+// app/Http/Controllers/ReportsController.php
+public function getProfit($by = null)
+{
+    // Enhanced method with new columns
+}
+```
+
+
+### 2️⃣ **Frontend Table Updates**​
+
+
+```text
+<!-- resources/views/report/partials/profit_by_products.blade.php -->
+<table class="table table-bordered table-striped" id="profit_by_products_table">
+    <!-- Enhanced table with new columns -->
+</table>
+```
+
+
+### 3️⃣ **JavaScript DataTable Configuration**​
+
+
+```text
+<!-- resources/views/report/profit_loss.blade.php -->
+<script>
+profit_by_products_table = $('#profit_by_products_table').DataTable({
+    // Enhanced column configuration
+});
+</script>
+```
+
+
+### 4️⃣ **Language File Updates**​
+
+
+```javascript
+// lang/en/lang_v1.php & lang/en/report.php
+'qty_sold' => 'Qty Sold',
+'total_sold' => 'Total Sold',
+// Additional translation keys
+```
+
+
+## Step 1: Update Controller Method​
+
+Replace your existing 
+```text
+getProfit
+```
+ method in 
+```text
+ReportsController.php
+```
+:
+
+
+```php
+   public function getProfit($by = null)
+{
+    $business_id = request()->session()->get('user.business_id');
+
+    $query = TransactionSellLine::join('transactions as sale', 'transaction_sell_lines.transaction_id', '=', 'sale.id')
+        ->leftjoin('transaction_sell_lines_purchase_lines as TSPL', 'transaction_sell_lines.id', '=', 'TSPL.sell_line_id')
+        ->leftjoin(
+            'purchase_lines as PL',
+            'TSPL.purchase_line_id',
+            '=',
+            'PL.id'
+        )
+        ->where('sale.type', 'sell')
+        ->where('sale.status', 'final')
+        ->join('products as P', 'transaction_sell_lines.product_id', '=', 'P.id')
+        ->where('sale.business_id', $business_id)
+        ->where('transaction_sell_lines.children_type', '!=', 'combo');
+    //If type combo: find childrens, sale price parent - get PP of childrens
+    $query->select(DB::raw('SUM(IF (TSPL.id IS NULL AND P.type="combo", (
+        SELECT Sum((tspl2.quantity - tspl2.qty_returned) * (tsl.unit_price_inc_tax - pl2.purchase_price_inc_tax)) AS total
+            FROM transaction_sell_lines AS tsl
+                JOIN transaction_sell_lines_purchase_lines AS tspl2
+            ON tsl.id=tspl2.sell_line_id
+            JOIN purchase_lines AS pl2
+            ON tspl2.purchase_line_id = pl2.id
+            WHERE tsl.parent_sell_line_id = transaction_sell_lines.id), IF(P.enable_stock=0,(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax,
+            (TSPL.quantity - TSPL.qty_returned) * (transaction_sell_lines.unit_price_inc_tax - PL.purchase_price_inc_tax)) )) AS gross_profit')
+        );
+
+    $permitted_locations = auth()->user()->permitted_locations();
+    if ($permitted_locations != 'all') {
+        $query->whereIn('sale.location_id', $permitted_locations);
+    }
+
+    if (! empty(request()->location_id)) {
+        $query->where('sale.location_id', request()->location_id);
+    }
+
+    if (! empty(request()->start_date) && ! empty(request()->end_date)) {
+        $start = request()->start_date;
+        $end = request()->end_date;
+        $query->whereDate('sale.transaction_date', '>=', $start)
+                    ->whereDate('sale.transaction_date', '<=', $end);
+    }
+
+    if ($by == 'product') {
+        $query->join('variations as V', 'transaction_sell_lines.variation_id', '=', 'V.id')
+            ->leftJoin('product_variations as PV', 'PV.id', '=', 'V.product_variation_id')
+            ->join('units', 'P.unit_id', '=', 'units.id');
+
+        // Add location-based stock query
+        $location_id = request()->location_id;
+        if (!empty($location_id)) {
+            $query->leftJoin('variation_location_details as vld', function($join) use ($location_id) {
+                $join->on('vld.variation_id', '=', 'V.id')
+                     ->where('vld.location_id', '=', $location_id);
+            });
+        } else {
+            // If no specific location, get stock from permitted locations
+            $query->leftJoin('variation_location_details as vld', function($join) use ($permitted_locations) {
+                $join->on('vld.variation_id', '=', 'V.id');
+                if ($permitted_locations != 'all') {
+                    $join->whereIn('vld.location_id', $permitted_locations);
+                }
+            });
+        }
+
+        $query->addSelect(DB::raw("IF(P.type='variable', CONCAT(P.name, ' - ', PV.name, ' - ', V.name, ' (', V.sub_sku, ')'), CONCAT(P.name, ' (', P.sku, ')')) as product"))
+            ->addSelect('P.enable_stock')
+            ->addSelect('units.actual_name as unit')
+            ->addSelect(DB::raw('SUM(COALESCE(vld.qty_available, 0)) as current_stock'))
+            ->addSelect(DB::raw('SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as total_sold'))
+            ->addSelect(DB::raw('SUM((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as total_sold_amount'))
+            ->addSelect(DB::raw('SUM(IF(TSPL.id IS NULL AND P.enable_stock=0, 0, (TSPL.quantity - TSPL.qty_returned) * PL.purchase_price_inc_tax)) as total_purchase_amount'))
+            ->addSelect(DB::raw('MAX(V.sell_price_inc_tax) as max_price'))
+            ->addSelect(DB::raw('MIN(V.sell_price_inc_tax) as min_price'))
+            ->addSelect(DB::raw('MAX(V.dpp_inc_tax) as max_purchase_price'))
+            ->addSelect(DB::raw('MIN(V.dpp_inc_tax) as min_purchase_price'))
+            ->addSelect('P.type')
+            ->groupBy('V.id');
+    }
+
+    if ($by == 'category') {
+        $query->join('variations as V', 'transaction_sell_lines.variation_id', '=', 'V.id')
+            ->leftJoin('categories as C', 'C.id', '=', 'P.category_id')
+            ->addSelect('C.name as category')
+            ->groupBy('C.id');
+    }
+
+    if ($by == 'brand') {
+        $query->join('variations as V', 'transaction_sell_lines.variation_id', '=', 'V.id')
+            ->leftJoin('brands as B', 'B.id', '=', 'P.brand_id')
+            ->addSelect('B.name as brand')
+            ->groupBy('B.id');
+    }
+
+    if ($by == 'location') {
+        $query->join('business_locations as L', 'sale.location_id', '=', 'L.id')
+            ->addSelect('L.name as location')
+            ->groupBy('L.id');
+    }
+
+    if ($by == 'invoice') {
+        $query->addSelect(
+            'sale.invoice_no',
+            'sale.id as transaction_id',
+            'sale.discount_type',
+            'sale.discount_amount',
+            'sale.total_before_tax'
+        )
+            ->groupBy('sale.invoice_no');
+    }
+
+    if ($by == 'date') {
+        $query->addSelect('sale.transaction_date')
+            ->groupBy(DB::raw('DATE(sale.transaction_date)'));
+    }
+
+    if ($by == 'day') {
+        $results = $query->addSelect(DB::raw('DAYNAME(sale.transaction_date) as day'))
+            ->groupBy(DB::raw('DAYOFWEEK(sale.transaction_date)'))
+            ->get();
+
+        $profits = [];
+        foreach ($results as $result) {
+            $profits[strtolower($result->day)] = $result->gross_profit;
+        }
+        $days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+        return view('report.partials.profit_by_day')->with(compact('profits', 'days'));
+    }
+
+    if ($by == 'customer') {
+        $query->join('contacts as CU', 'sale.contact_id', '=', 'CU.id')
+        ->addSelect('CU.name as customer', 'CU.supplier_business_name')
+            ->groupBy('sale.contact_id');
+    }
+
+    if ($by == 'service_staff') {
+        $query->join('users as U', function ($join) {
+            $join->on(DB::raw("COALESCE(transaction_sell_lines.res_service_staff_id, sale.res_waiter_id)"), '=', 'U.id');
+        })
+        ->where('U.is_enable_service_staff_pin', 1)
+        ->addSelect(
+            "U.first_name as f_name",
+            "U.last_name as l_name",
+            "U.surname as surname"
+        )
+        ->groupBy('U.id');
+    }
+
+    $datatable = Datatables::of($query);
+
+    if (in_array($by, ['invoice'])) {
+        $datatable->editColumn('gross_profit', function ($row) {
+            $discount = $row->discount_amount;
+            if ($row->discount_type == 'percentage') {
+                $discount = ($row->discount_amount * $row->total_before_tax) / 100;
+            }
+
+            $profit = $row->gross_profit - $discount;
+            $html = '<span class="gross-profit" data-orig-value="'.$profit.'" >'.$this->transactionUtil->num_f($profit, true).'</span>';
+
+            return $html;
+        });
+    } else {
+        $datatable->editColumn(
+            'gross_profit',
+            function ($row) {
+                return '<span class="gross-profit" data-orig-value="'.$row->gross_profit.'">'.$this->transactionUtil->num_f($row->gross_profit, true).'</span>';
+            });
+    }
+
+    if ($by == 'category') {
+        $datatable->editColumn(
+            'category',
+            '{{$category ?? __("lang_v1.uncategorized")}}'
+        );
+    }
+    if ($by == 'brand') {
+        $datatable->editColumn(
+            'brand',
+            '{{$brand ?? __("report.others")}}'
+        );
+    }
+
+    if ($by == 'date') {
+        $datatable->editColumn('transaction_date', '{{@format_date($transaction_date)}}');
+    }
+
+    if ($by == 'product') {
+        $datatable->filterColumn(
+             'product',
+             function ($query, $keyword) {
+                 $query->whereRaw("IF(P.type='variable', CONCAT(P.name, ' - ', PV.name, ' - ', V.name, ' (', V.sub_sku, ')'), CONCAT(P.name, ' (', P.sku, ')')) LIKE '%{$keyword}%'");
+             });
+
+        // Add new columns for product report
+        $datatable->editColumn('current_stock', function ($row) {
+            if ($row->enable_stock) {
+                $stock = $this->transactionUtil->num_f($row->current_stock, false, null, true);
+                return $stock.' '.$row->unit;
+            } else {
+                return '--';
+            }
+        });
+
+        $datatable->editColumn('total_sold', function ($row) {
+            $sold = $this->transactionUtil->num_f($row->total_sold, false, null, true);
+            return $sold.' '.$row->unit;
+        });
+
+        $datatable->editColumn('total_sold_amount', function ($row) {
+            return '<span class="total-sold-amount" data-orig-value="'.$row->total_sold_amount.'">'.$this->transactionUtil->num_f($row->total_sold_amount, true).'</span>';
+        });
+
+        $datatable->editColumn('total_purchase_amount', function ($row) {
+            return '<span class="total-purchase-amount" data-orig-value="'.$row->total_purchase_amount.'">'.$this->transactionUtil->num_f($row->total_purchase_amount, true).'</span>';
+        });
+
+        $datatable->addColumn(
+            'purchase_price',
+            '<div style="white-space: nowrap;">@format_currency($min_purchase_price) @if($max_purchase_price != $min_purchase_price && $type == "variable") -  @format_currency($max_purchase_price)@endif </div>'
+        );
+
+        $datatable->addColumn(
+            'selling_price',
+            '<div style="white-space: nowrap;">@format_currency($min_price) @if($max_price != $min_price && $type == "variable") -  @format_currency($max_price)@endif </div>'
+        );
+    }
+
+    $raw_columns = ['gross_profit'];
+
+    if ($by == 'customer') {
+        $datatable->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}}, <br> @endif {{$customer}}');
+        $raw_columns[] = 'customer';
+    }
+
+    if($by == 'service_staff'){
+        $datatable->editColumn('staff_name', '{{$surname}} {{$f_name}} {{$l_name}}');
+        $raw_columns[] = 'staff_name';
+    }
+
+    if ($by == 'invoice') {
+        $datatable->editColumn('invoice_no', function ($row) {
+            return '<a data-href="'.action([\App\Http\Controllers\SellController::class, 'show'], [$row->transaction_id])
+                        .'" href="#" data-container=".view_modal" class="btn-modal">'.$row->invoice_no.'</a>';
+        });
+        $raw_columns[] = 'invoice_no';
+    }
+
+    if ($by == 'product') {
+        $raw_columns[] = 'selling_price';
+        $raw_columns[] = 'purchase_price';
+        $raw_columns[] = 'current_stock';
+        $raw_columns[] = 'total_sold';
+        $raw_columns[] = 'total_sold_amount';
+        $raw_columns[] = 'total_purchase_amount';
+    }
+
+    return $datatable->rawColumns($raw_columns)
+              ->make(true);
+}
+```
+
+
+**Key Enhancements:**
+
+✅ **Location-based Stock** : Uses 
+```text
+variation_location_details
+```
+ filtered by selected location  
+✅ **Sales Calculations** : Accurate quantity and amount calculations with returns handling  
+✅ **Price Ranges** : Shows min-max for variable products, single price for others  
+✅ **Proper Formatting** : Currency formatting, number formatting, and unit display
+
+## Step 2: Update Table Structure​
+
+Update your profit by products table file (
+```text
+resources/views/report/partials/profit_by_products.blade.php
+```
+):
+
+
+```text
+<div class="table-responsive">
+    <table class="table table-bordered table-striped" id="profit_by_products_table">
+        <thead>
+            <tr>
+                <th>@lang('sale.product')</th>
+                <th>@lang('report.current_stock')</th>
+                <th>@lang('lang_v1.qty_sold')</th>
+                <th>@lang('lang_v1.selling_price')</th>
+                <th>@lang('lang_v1.purchase_price')</th>
+                <th>@lang('lang_v1.total_sold')</th>
+                <th>@lang('report.total_purchase')</th>
+                <th>@lang('lang_v1.gross_profit')</th>
+            </tr>
+        </thead>
+        <tfoot>
+            <tr class="bg-gray font-17 footer-total">
+                <td><strong>@lang('sale.total'):</strong></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="footer_sold_amount"></td>
+                <td class="footer_purchase_amount"></td>
+                <td class="footer_total"></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <p class="text-muted">
+        @lang('lang_v1.profit_note')
+    </p>
+</div>
+```
+
+
+**Column Order Logic:**
+
+  1. **Product Information** : Product name and current stock
+  2. **Sales Data** : Quantity sold
+  3. **Unit Economics** : Selling and purchase prices per unit
+  4. **Financial Totals** : Total revenue and costs
+  5. **Profitability** : Final gross profit
+
+
+
+## Step 3: Update JavaScript DataTable​
+
+Update the DataTable configuration in your profit loss view (
+```text
+resources/views/report/profit_loss.blade.php
+```
+):
+
+
+```text
+profit_by_products_table = $('#profit_by_products_table').DataTable({
+    processing: true,
+    serverSide: true,
+    fixedHeader: false,
+    ajax: {
+        url: '/reports/get-profit/product',
+        data: function (d) {
+            d.start_date = $('#profit_loss_date_filter')
+                .data('daterangepicker')
+                .startDate.format('YYYY-MM-DD');
+            d.end_date = $('#profit_loss_date_filter')
+                .data('daterangepicker')
+                .endDate.format('YYYY-MM-DD');
+            d.location_id = $('#profit_loss_location_filter').val();
+        },
+    },
+    columns: [
+        {
+            data: 'product',
+            name: 'product',
+        },
+        {
+            data: 'current_stock',
+            name: 'current_stock',
+            searchable: false,
+        },
+        {
+            data: 'total_sold',
+            name: 'total_sold',
+            searchable: false,
+        },
+        {
+            data: 'selling_price',
+            name: 'selling_price',
+            searchable: false,
+        },
+        {
+            data: 'purchase_price',
+            name: 'purchase_price',
+            searchable: false,
+        },
+        {
+            data: 'total_sold_amount',
+            name: 'total_sold_amount',
+            searchable: false,
+        },
+        {
+            data: 'total_purchase_amount',
+            name: 'total_purchase_amount',
+            searchable: false,
+        },
+        {
+            data: 'gross_profit',
+            name: 'gross_profit',
+            searchable: false,
+        },
+    ],
+    footerCallback: function (row, data, start, end, display) {
+        var total_profit = 0;
+        var total_sold_amount = 0;
+        var total_purchase_amount = 0;
+
+        for (var r in data) {
+            total_profit += $(data[r].gross_profit).data('orig-value')
+                ? parseFloat($(data[r].gross_profit).data('orig-value'))
+                : 0;
+
+            total_sold_amount += $(data[r].total_sold_amount).data('orig-value')
+                ? parseFloat($(data[r].total_sold_amount).data('orig-value'))
+                : 0;
+
+            total_purchase_amount += $(data[r].total_purchase_amount).data(
+                'orig-value'
+            )
+                ? parseFloat(
+                      $(data[r].total_purchase_amount).data('orig-value')
+                  )
+                : 0;
+        }
+
+        $('#profit_by_products_table .footer_total').html(
+            __currency_trans_from_en(total_profit)
+        );
+        $('#profit_by_products_table .footer_sold_amount').html(
+            __currency_trans_from_en(total_sold_amount)
+        );
+        $('#profit_by_products_table .footer_purchase_amount').html(
+            __currency_trans_from_en(total_purchase_amount)
+        );
+    },
+});
+```
+
+
+**Enhanced Features:**
+
+✅ **Multi-column Footer Totals** : Shows totals for sold amount, purchase amount, and profit  
+✅ **Location Filtering** : Automatically filters data when location changes  
+✅ **Date Filtering** : Integrates with existing date range picker  
+✅ **Proper Data Types** : Handles numeric calculations correctly
+
+## Step 4: Add Language Translations​
+
+Update your language files with the new translation keys:
+
+
+```javascript
+// lang/en/lang_v1.php
+'qty_sold' => 'Qty Sold',
+'total_sold' => 'Total Sold',
+'selling_price' => 'Selling Price',
+'purchase_price' => 'Purchase Price',
+'gross_profit' => 'Gross Profit',
+
+// lang/en/report.php
+'current_stock' => 'Current Stock',
+'total_purchase' => 'Total Purchase',
+```
+
+
+**Translation Best Practices:**
+
+  * Use consistent terminology across your application
+  * Consider multi-language support from the beginning
+  * Follow existing naming conventions in your language files
+
+
+
+## Step 5: Clear Caches and Test​
+
+Clear Laravel caches to ensure changes are reflected:
+
+
+```text
+# Clear all caches
+php artisan optimize:clear
+
+# Or individually
+php artisan route:clear
+php artisan cache:clear
+php artisan config:clear
+php artisan view:clear
+```
+
+
+## Features Overview​
+
+### 🔢 Current Stock​
+
+  * **Real-time Data** : Shows current inventory levels
+  * **Location Filtered** : Respects selected location filter
+  * **Unit Display** : Shows quantity with appropriate unit (pcs, kg, etc.)
+  * **Stock Status** : Shows '--' for non-stock items
+
+
+
+### 📊 Quantity Sold​
+
+  * **Period Filtered** : Shows sales for selected date range
+  * **Returns Handled** : Automatically subtracts returned items
+  * **Unit Display** : Consistent with stock display format
+  * **Zero Handling** : Properly displays zero sales
+
+
+
+### 💰 Unit Pricing​
+
+  * **Selling Price** : Current selling price per unit
+  * **Purchase Price** : Latest purchase price per unit
+  * **Variable Products** : Shows price range (min - max)
+  * **Currency Formatted** : Uses system currency settings
+
+
+
+### 💵 Total Amounts​
+
+  * **Total Sold Amount** : Revenue = Qty × Selling Price
+  * **Total Purchase Amount** : Cost = Qty × Purchase Price
+  * **Verification** : Total Sold - Total Purchase = Gross Profit
+  * **Footer Totals** : Sum of all visible rows
+
+
+
+### 🎯 Business Intelligence​
+
+  * **Profit Margins** : Easy calculation of profit percentages
+  * **Performance Analysis** : Identify top-selling and most profitable products
+  * **Inventory Insights** : Compare stock levels with sales velocity
+  * **Financial Verification** : Cross-check profit calculations
+
+
+
+## Advanced Filtering​
+
+### Location-Based Analysis​
+
+
+```text
+// The report automatically filters by selected location:
+- Stock levels from selected location only
+- Sales data from selected location only
+- Consistent data across all columns
+```
+
+
+### Date Range Analysis​
+
+
+```text
+// All sales data respects date filter:
+- Quantity sold in period
+- Revenue generated in period
+- Costs incurred in period
+- Profit earned in period
+```
+
+
+## Calculation Formulas​
+
+### Core Calculations​
+
+
+```text
+// Quantity Sold
+SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned)
+
+// Total Sold Amount
+SUM((quantity - returns) × selling_price_per_unit)
+
+// Total Purchase Amount
+SUM((quantity - returns) × purchase_price_per_unit)
+
+// Gross Profit
+Total Sold Amount - Total Purchase Amount
+```
+
+
+### Variable Products​
+
+
+```text
+// Price Range Display
+MIN(variation_selling_price) - MAX(variation_selling_price)
+
+// Stock Aggregation
+SUM(stock_across_all_variations)
+```
+
+
+## Performance Considerations​
+
+### Database Optimization​
+
+  * **Indexed Joins** : Ensure proper indexing on joined columns
+  * **Query Optimization** : Uses efficient GROUP BY and aggregation
+  * **Pagination** : Server-side processing for large datasets
+  * **Caching** : Consider implementing query result caching
+
+
+
+### Memory Management​
+
+  * **Chunked Processing** : DataTables handles large datasets efficiently
+  * **Selective Loading** : Only loads visible data
+  * **Footer Calculations** : Efficient summation algorithms
+
+
+
+## Troubleshooting​
+
+### Common Issues​
+
+#### Stock Numbers Don't Match​
+
+
+```text
+Problem: Current stock doesn't align with sales data
+Solution: Verify location filter is applied consistently
+Check: variation_location_details table has correct data
+```
+
+
+#### Price Ranges Incorrect​
+
+
+```text
+Problem: Min/Max prices showing wrong values
+Solution: Check variation table data integrity
+Verify: product_variations and variations relationships
+```
+
+
+#### Total Calculations Wrong​
+
+
+```text
+Problem: Footer totals don't add up
+Solution: Verify data-orig-value attributes in HTML
+Check: JavaScript parseFloat() handling
+```
+
+
+#### Performance Issues​
+
+
+```text
+Problem: Report loads slowly
+Solution: Add database indexes on joined columns
+Consider: Implementing result caching
+```
+
+
+### Debugging Steps​
+
+  1. **Check Database Queries**
+
+
+
+
+```sql
+-- Verify product variations
+SELECT * FROM variations WHERE product_id = [ID];
+
+-- Check stock data
+SELECT * FROM variation_location_details WHERE variation_id = [ID];
+
+-- Validate sales data
+SELECT * FROM transaction_sell_lines WHERE variation_id = [ID];
+```
+
+
+  2. **Console Debugging**
+
+
+
+
+```text
+// Check AJAX response
+console.log('DataTable AJAX response:', data);
+
+// Verify footer calculations
+console.log('Total calculations:', {
+    profit: total_profit,
+    sold: total_sold_amount,
+    purchase: total_purchase_amount,
+});
+```
+
+
+  3. **Laravel Debugging**
+
+
+
+
+```text
+// Log query results
+\Log::info('Profit query result:', $query->toSql());
+
+// Debug data formatting
+\Log::info('Product data:', $row->toArray());
+```
+
+
+## Customization Options​
+
+### Adding More Columns​
+
+To add additional columns:
+
+  1. **Update Controller Query**
+
+
+
+
+```text
+->addSelect(DB::raw('your_calculation as new_column'))
+```
+
+
+  2. **Add DataTable Column**
+
+
+
+
+```text
+{
+    data: 'new_column',
+    name: 'new_column',
+    "searchable": false
+}
+```
+
+
+  3. **Update Table Header**
+
+
+
+
+```text
+<th>@lang('your.translation')</th>
+```
+
+
+### Custom Calculations​
+
+Add business-specific calculations:
+
+
+```text
+// Example: Profit percentage
+->addSelect(DB::raw('
+    CASE
+        WHEN SUM(total_purchase_amount) > 0
+        THEN ROUND((SUM(total_sold_amount) - SUM(total_purchase_amount)) / SUM(total_purchase_amount) * 100, 2)
+        ELSE 0
+    END as profit_percentage
+'))
+```
+
+
+### Styling Customizations​
+
+Customize the appearance:
+
+
+```text
+/* Custom CSS for enhanced report */
+.profit-report-enhanced {
+    .total-sold-amount {
+        color: #28a745;
+    }
+    .total-purchase-amount {
+        color: #dc3545;
+    }
+    .gross-profit {
+        font-weight: bold;
+    }
+}
+```
+
+
+## Best Practices​
+
+### Data Integrity​
+
+  * Always handle null values in calculations
+  * Use COALESCE for stock data that might be missing
+  * Implement proper error handling in controllers
+
+
+
+### User Experience​
+
+  * Provide loading indicators for large datasets
+  * Use consistent number formatting throughout
+  * Include helpful tooltips for complex calculations
+
+
+
+### Performance​
+
+  * Implement query result caching for frequently accessed data
+  * Use database indexes on frequently joined columns
+  * Consider pagination for very large datasets
+
+
+
+### Security​
+
+  * Validate location access permissions
+  * Sanitize all user inputs
+  * Use Laravel's built-in CSRF protection
+
+
+
+## Conclusion​
+
+The Enhanced Profit by Products Report provides comprehensive financial insights with real-time inventory integration. The implementation offers:
+
+  * **Complete Financial Picture** : From unit economics to total performance
+  * **Location Intelligence** : Accurate stock and sales data by location
+  * **Profit Verification** : Mathematical accuracy with cross-validation
+  * **Business Intelligence** : Actionable insights for decision making
+  * **Scalable Architecture** : Efficient handling of large datasets
+
+
+
+This enhancement transforms a basic profit report into a powerful business intelligence tool that helps managers make informed decisions about inventory, pricing, and product performance.
+
+### 💬 Discussion & Questions
+
+Commenting as: **ithiyacloud5@gmail.com**
+
+Post Comment
+
+💭 No comments yet
+
+Be the first to share your thoughts!
+
+💛 Support this project
+
+![Binance ID QR Code](/img/docs/binance-id-qr-code-2.png)
+
+Scan with Binance app
+
+Binance ID:
+
+
+```text
+478036326
+```
+📋
