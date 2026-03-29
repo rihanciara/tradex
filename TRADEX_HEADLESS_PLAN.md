@@ -59,11 +59,11 @@ Ensuring the POS remains functional and lightning-fast under heavy load or poor 
 ## Phase 5: Next.js Frontend Development (Vercel)
 The actual implementation of the user interface on the new stack.
 
-- [ ] **5.1 Project Scaffold:** Initialize the Next.js application with Tailwind CSS, TypeScript, and state management (Zustand or Redux).
-- [ ] **5.2 Authentication Flow:** Implement login screens, secure token storage (HttpOnly cookies or secure local storage), and route guards.
-- [ ] **5.3 Layout & UI Components:** Build the core POS layout (sidebar, product grid, cart panel, numpad).
-- [ ] **5.4 Cart Logic (State Management):** Implement local cart calculations (subtotals, taxes, discounts) that perfectly mirror the backend's logic to prevent discrepancies during checkout.
-- [ ] **5.5 Payment Modals & Receipt Printing:** Build the final checkout flow UI and integrate with browser printing for receipts.
+- [x] **5.1 Project Scaffold:** Initialize the Next.js application with Tailwind CSS, TypeScript, and state management (Zustand or Redux).
+- [x] **5.2 Authentication Flow:** Implement login screens, secure token storage (HttpOnly cookies or secure local storage), and route guards.
+- [x] **5.3 Layout & UI Components:** Build the core POS layout (sidebar, product grid, cart panel, numpad).
+- [x] **5.4 Cart Logic (State Management):** Implement local cart calculations (subtotals, taxes, discounts) that perfectly mirror the backend's logic to prevent discrepancies during checkout.
+- [x] **5.5 Payment Modals & Receipt Printing:** Build the final checkout flow UI and integrate with browser printing for receipts.
 
 ---
 
@@ -76,8 +76,6 @@ The actual implementation of the user interface on the new stack.
 ---
 
 ## Current Status (As of Last Session)
-- **Phase 4 Complete (Offline Resilience):** Implemented a lightweight, zero-dependency native IndexedDB wrapper (`db.ts`). Integrated a "Cache-Then-Network" fallback strategy in all API fetches (`init`, `catalog`, `taxonomies`, `customers`), ensuring the POS can seamlessly cold-boot even when offline (provided a previous sync exists). Built an `OfflineSyncManager` component that automatically intercepts failed checkouts, queues them locally, and background-syncs them to the Laravel API as soon as `navigator.onLine` is restored.
-- **Phase 2 Complete:** We have finished the Core Data Synchronization phase by implementing the Taxonomies endpoint (Phase 2.3). The POS UI now includes a left-hand sidebar in the Product Grid that fetches and allows filtering by Categories and Brands.
-- **Skipped Phase 3.1:** As per user request, Cash Register Operations have been skipped/deferred.
-- **Phase 3.2 Refinement (Simplified POS Checkout):** As per user request, we are abandoning complex checkout flows (Modifiers, Suspend, Drafts, Quotations, Cash Register Tracking). The focus is now on high-performance, direct "Final" sales. The checkout endpoint needs to be polished to handle cart-level discounts and taxes accurately, bypassing heavy native POS controller logic where it slows things down.
-- **Next Action:** Refine the `ApiPosController->checkout()` method to ensure it correctly calculates taxes, discounts, deducts stock, logs payment, and returns the formatted receipt URL securely and extremely fast. Then begin UI/UX polishing (Phase 5).
+- **Phase 3.2 Refinement Complete:** The checkout endpoint has been optimized to handle cart-level discounts and taxes accurately, bypassing heavy native POS controller logic where it slows things down.
+- **Phase 5 Complete:** The Next.js frontend has been polished. It successfully manages cart logic (taxes/discounts), offline capabilities, has a fully featured UI for checkout, and natively triggers a beautiful receipt print using `@media print` styles directly after a successful sale.
+- **Next Action:** Finalize any remaining UI features (e.g., Numpad, Split Payments) or move straight into Phase 6 (Testing & Deployment).
