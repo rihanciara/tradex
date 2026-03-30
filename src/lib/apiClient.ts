@@ -30,9 +30,9 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // Redirect to login if token expires or Vercel mode is off
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    if (error.response?.status === 401) {
+      // Redirect to login if token expires or is invalid
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         Cookies.remove('auth_token');
         window.location.href = '/login';
       }
