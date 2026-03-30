@@ -15,12 +15,12 @@ use Modules\JerryUpdates\Http\Controllers\Api\ApiAuthController;
 |
 */
 
-Route::prefix('jerryupdates/v1/auth')->middleware(['api'])->group(function () {
+Route::prefix('v1/auth')->middleware(['api'])->group(function () {
     Route::post('login', [ApiAuthController::class, 'login']);
 });
 
 // We wrap POS endpoints in an API group. You can hit this locally via Postman with proper headers.
-Route::prefix('jerryupdates/v1/pos')->middleware(['api', 'auth:api'])->group(function () {
+Route::prefix('v1/pos')->middleware(['api', 'auth:api'])->group(function () {
     
     Route::get('profile', [ApiAuthController::class, 'profile']);
     Route::post('logout', [ApiAuthController::class, 'logout']);
