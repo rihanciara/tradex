@@ -13,6 +13,9 @@ export function ProductGrid() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [activeLetter, setActiveLetter] = useState<string | null>(null);
+  
+  const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
   
   const locationId = usePosStore(state => state.initData?.location_id);
   const setSettingsOpen = usePosStore(state => state.setSettingsOpen);
@@ -44,6 +47,15 @@ export function ProductGrid() {
       result = result.filter(product => product.brand === selectedBrand);
     }
 
+    // Apply Alphabet Filter
+    if (activeLetter) {
+      if (activeLetter === '#') {
+        result = result.filter(product => /^[^a-zA-Z]/.test(product.product_name));
+      } else {
+        result = result.filter(product => product.product_name.toUpperCase().startsWith(activeLetter));
+      }
+    }
+
     // Apply Search Term
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
@@ -57,7 +69,7 @@ export function ProductGrid() {
     }
 
     return result;
-  }, [catalogData, searchTerm, selectedCategory, selectedBrand]);
+  }, [catalogData, searchTerm, selectedCategory, selectedBrand, activeLetter]);
 
   if (catalogLoading) return (
     <div className="h-full flex items-center justify-center bg-[#f5f5f7]">
@@ -234,6 +246,29 @@ export function ProductGrid() {
             <p className="text-[13px] font-medium text-[#86868b]">
               {filteredProducts.length} items
             </p>
+          </div>
+
+          {/* A-Z Alphabetical Scrubber */}
+          <div className="mt-4 pt-4 border-t border-black/5 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none snap-x">
+            <button
+              onClick={() => setActiveLetter(null)}
+              className={`flex-shrink-0 snap-start px-4 py-1.5 rounded-full text-[12px] font-bold transition-colors ${
+                activeLetter === null ? 'bg-[#1d1d1f] text-white' : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]'
+              }`}
+            >
+              All
+            </button>
+            {alphabet.map((letter) => (
+              <button
+                key={letter}
+                onClick={() => setActiveLetter(letter)}
+                className={`flex-shrink-0 snap-start w-8 h-8 flex items-center justify-center rounded-full text-[13px] font-bold transition-all ${
+                  activeLetter === letter ? 'bg-[#0071e3] text-white shadow-md scale-110' : 'bg-transparent text-[#86868b] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]'
+                }`}
+              >
+                {letter}
+              </button>
+            ))}
           </div>
         </div>
 

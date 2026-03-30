@@ -24,12 +24,12 @@ export default function PosPage() {
       <main className="flex flex-col md:flex-row h-[100dvh] bg-white overflow-hidden text-gray-800 relative w-full">
         
         {/* Left Side: Product Grid & Search */}
-        <section className={`flex-1 h-full shadow-2xl z-10 w-full md:w-2/3 ${activeMobileTab === 'products' ? 'block' : 'hidden md:block'}`}>
+        <section className={`flex-1 min-h-0 shadow-2xl z-10 w-full md:w-2/3 ${activeMobileTab === 'products' ? 'flex flex-col' : 'hidden md:flex md:flex-col'}`}>
           <ProductGrid />
         </section>
 
         {/* Right Side: The Cashier Cart */}
-        <section className={`flex-1 md:flex-none h-full shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 relative w-full md:w-1/3 md:min-w-[350px] md:max-w-[450px] ${activeMobileTab === 'cart' ? 'block' : 'hidden md:block'}`}>
+        <section className={`flex-1 md:flex-none min-h-0 shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 relative w-full md:w-1/3 md:min-w-[350px] md:max-w-[450px] ${activeMobileTab === 'cart' ? 'flex flex-col' : 'hidden md:flex md:flex-col'}`}>
           <Cart />
         </section>
 
