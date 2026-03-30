@@ -1,7 +1,7 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { X, RefreshCw, LogOut, Terminal, User, Store, Database } from 'lucide-react';
+import { X, RefreshCw, LogOut, Terminal, User, Store, Database, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
@@ -9,9 +9,29 @@ import Cookies from 'js-cookie';
 export function SettingsModal() {
   const { isSettingsOpen, setSettingsOpen, initData, clearCart } = usePosStore();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSsoLoading, setIsSsoLoading] = useState(false);
   const router = useRouter();
 
   if (!isSettingsOpen) return null;
+
+  const handleSsoBridge = async () => {
+    setIsSsoLoading(true);
+    try {
+      const { apiClient } = await import('@/lib/apiClient');
+      const response = await apiClient.get('/auth/sso-url');
+      if (response.data?.success && response.data?.data?.sso_url) {
+        // Redirection completely leaves the Next.js realm and creates Laravel session
+        window.location.href = response.data.data.sso_url;
+      } else {
+        alert("Failed to securely generate dashboard link.");
+      }
+    } catch (err) {
+      console.error("SSO Bridge error", err);
+      alert("Failed to securely generate dashboard link.");
+    } finally {
+      setIsSsoLoading(false);
+    }
+  };
 
   const handleForceResync = async () => {
     setIsSyncing(true);
@@ -91,6 +111,18 @@ export function SettingsModal() {
                 <span className="text-[15px] font-semibold text-[#1d1d1f]">{initData?.business?.name || 'Loading...'}</span>
               </div>
             </div>
+          </div>
+
+          {/* Navigation Section */}
+          <div className="pt-2">
+            <button
+              onClick={handleSsoBridge}
+              disabled={isSsoLoading}
+              className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-4 rounded-2xl text-[15px] flex items-center justify-center gap-2 transition-colors apple-btn shadow-sm disabled:opacity-50"
+            >
+              {isSsoLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ExternalLink className="w-5 h-5" />}
+              Back to Dashboard
+            </button>
           </div>
 
           {/* Database Section */}

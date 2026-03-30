@@ -9,22 +9,54 @@ import { PosInitializer } from '@/components/pos/PosInitializer';
 import { OfflineSyncManager } from '@/components/pos/OfflineSyncManager';
 import { SettingsModal } from '@/components/pos/SettingsModal';
 
+import { useState } from 'react';
+import { ShoppingBag, LayoutGrid } from 'lucide-react';
+import { usePosStore } from '@/store/posStore';
+
 export default function PosPage() {
+  const [activeMobileTab, setActiveMobileTab] = useState<'products' | 'cart'>('products');
+  const cartItemsCount = usePosStore((state) => state.cart.length);
+
   return (
     <QueryClientProvider client={queryClient}>
       <PosInitializer />
       <OfflineSyncManager />
-      <main className="flex h-screen bg-white overflow-hidden text-gray-800">
+      <main className="flex flex-col md:flex-row h-[100dvh] bg-white overflow-hidden text-gray-800 relative w-full">
         
         {/* Left Side: Product Grid & Search */}
-        <section className="flex-1 h-full w-2/3 shadow-2xl z-10">
+        <section className={`flex-1 h-full shadow-2xl z-10 w-full md:w-2/3 ${activeMobileTab === 'products' ? 'block' : 'hidden md:block'}`}>
           <ProductGrid />
         </section>
 
         {/* Right Side: The Cashier Cart */}
-        <section className="w-1/3 min-w-[350px] max-w-[450px] h-full shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 relative">
+        <section className={`flex-1 md:flex-none h-full shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 relative w-full md:w-1/3 md:min-w-[350px] md:max-w-[450px] ${activeMobileTab === 'cart' ? 'block' : 'hidden md:block'}`}>
           <Cart />
         </section>
+
+        {/* Mobile Tab Navigation */}
+        <div className="md:hidden flex bg-[#fbfbfd]/90 backdrop-blur-xl border-t border-black/10 z-50">
+          <button 
+            onClick={() => setActiveMobileTab('products')}
+            className={`flex-1 py-3 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 transition-colors ${activeMobileTab === 'products' ? 'text-[#0071e3]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
+          >
+            <LayoutGrid className="w-6 h-6" />
+            Products
+          </button>
+          <button 
+            onClick={() => setActiveMobileTab('cart')}
+            className={`flex-1 py-3 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 relative transition-colors ${activeMobileTab === 'cart' ? 'text-[#0071e3]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
+          >
+            <div className="relative">
+              <ShoppingBag className="w-6 h-6" />
+              {cartItemsCount > 0 && (
+                <span className="absolute -top-1 -right-2 bg-[#ff3b30] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {cartItemsCount}
+                </span>
+              )}
+            </div>
+            Current Bag
+          </button>
+        </div>
 
         {/* Checkout Modal Overlay */}
         <CheckoutModal />

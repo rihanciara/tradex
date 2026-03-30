@@ -246,14 +246,24 @@ export function ProductGrid() {
               <p className="text-[#86868b] text-[15px] mt-1">Try adjusting your filters or search term.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-              {filteredProducts.map((product) => (
-                <ProductCard 
-                  key={`${product.product_id}-${product.variation_id}`} 
-                  product={product} 
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+                {filteredProducts.slice(0, 100).map((product) => (
+                  <ProductCard key={product.variation_id} product={product} />
+                ))}
+              </div>
+              
+              {filteredProducts.length > 100 && (
+                <div className="mt-10 mb-6 flex flex-col items-center justify-center p-6 bg-[#f5f5f7]/50 rounded-2xl border border-black/5">
+                  <p className="text-[#1d1d1f] text-[15px] font-semibold">
+                    Displaying 100 of {new Intl.NumberFormat('en-US').format(filteredProducts.length)} items.
+                  </p>
+                  <p className="text-[#86868b] text-[13px] font-medium mt-1">
+                    Please use the search bar above or scan a barcode to find specific products.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
