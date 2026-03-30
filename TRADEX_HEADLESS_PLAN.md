@@ -146,3 +146,10 @@ CheckoutModal   ──POST──▶  /api/v1/pos/checkout       (transaction ins
 SettingsModal   ──GET───▶  /api/v1/auth/sso-url       (Cache token)
 Browser         ──GET───▶  /sso/magic-login/{id}      (web session bridge)
 ```
+
+## Recent Accomplishments (Latest Pull)
+- **Settings Modal & Security:** Implemented a secure logout flow that destroys the `auth_token` cookie, clears the Zustand cart state, and purges the `tradex_pos_db` IndexedDB.
+- **Manual Sync:** Added a "Force Resync" button to the Settings Modal allowing cashiers to manually purge their offline database and fetch the freshest prices.
+- **Card & Partial Payments:** Unified the payment input in `CheckoutModal.tsx`, allowing exact amounts for both Cash and Card. Added safety guardrails against overcharging cards, and visual alerts for partial payments ("Remaining balance will be marked as Due").
+- **Catalog Pagination Bypass:** Rewrote `fetchCatalog` in `api.ts` to use a recursive `while` loop that chunks requests. This completely bypasses the 1,000-item hard limit, successfully syncing 20,000+ product catalogs into IndexedDB without blowing out server memory.
+- **Error Handling:** Improved UI error boundaries in `PosInitializer` to render the actual backend error trace rather than masking it. Hardened Axios interceptors to prevent infinite reload loops on 403s.
