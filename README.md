@@ -53,3 +53,20 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 - **Styling**: Tailwind CSS v4 & Framer Motion
 - **State**: Zustand (Local Storage / IndexedDB Cached)
 - **Data Fetching**: React Query & Axios
+
+---
+
+## 🆘 Troubleshooting
+
+### ❌ Error: "Invalid key supplied" (500 Server Error on Login)
+If you attempt to log in on the Next.js frontend and receive a `500 Server Error` containing the exact string `"message": "Invalid key supplied"`, this means your **Laravel Backend** is missing its Passport RSA encryption keys in its `storage/` directory.
+
+Because the `storage/oauth-*.key` files are ignored by git (`.gitignore`), they are never transferred when you clone or pull the backend repository to a new remote server. When the API attempts to generate a Bearer token via `createToken()`, it crashes looking for these keys.
+
+**The Fix:**
+SSH into your remote Laravel backend (`fwcv3` or `app12`) and run:
+```bash
+php artisan passport:keys --force
+php artisan config:clear
+```
+This will instantly generate `oauth-private.key` and `oauth-public.key` natively on the server, permanently resolving the cryptosystem crash.
