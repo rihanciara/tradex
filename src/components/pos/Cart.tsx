@@ -1,7 +1,7 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { Minus, Plus, ShoppingCart, Apple, Tag, Receipt } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, Apple, Tag, Receipt, FastForward } from 'lucide-react';
 import { CustomerSelect } from './CustomerSelect';
 import { useState } from 'react';
 
@@ -21,6 +21,7 @@ export function Cart() {
     cartDiscountType,
     cartTaxId,
     setCheckoutOpen, 
+    triggerExpressCash,
     initData 
   } = usePosStore();
 
@@ -81,7 +82,8 @@ export function Cart() {
       </div>
 
       {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto px-6 py-2 pb-24">
+      {/* Cart Items List */}
+      <div className="flex-1 overflow-y-auto px-6 py-2">
         <div className="space-y-4 pt-2">
           {cart.map((item) => (
             <div 
@@ -147,8 +149,8 @@ export function Cart() {
         </div>
       </div>
 
-      {/* Floating Apple Pay / Checkout Footer */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-2xl border-t border-black/5 z-30 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+      {/* Floating Apple Pay / Checkout Footer fixed to Flex column */}
+      <div className="flex-none bg-white/90 backdrop-blur-2xl border-t border-black/5 z-30 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         
         {/* Actions Bar (Discount / Tax) */}
         <div className="flex border-b border-black/5">
@@ -197,15 +199,17 @@ export function Cart() {
             {/* Main Checkout Button */}
             <button 
               onClick={() => setCheckoutOpen(true)}
-              className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
+              disabled={cart.length === 0}
+              className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
               Review Order
             </button>
             
-            {/* Apple Pay / Secondary */}
+            {/* Express Cash Button */}
             <button 
-              onClick={() => setCheckoutOpen(true)}
-              className="w-full bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center">
-              <Apple className="w-5 h-5 mr-1.5 mb-0.5" fill="currentColor" /> Pay
+              onClick={() => triggerExpressCash()}
+              disabled={cart.length === 0}
+              className="w-full bg-[#34c759] hover:bg-[#28a745] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+              <FastForward className="w-5 h-5 mr-1.5" /> Express Cash
             </button>
           </div>
         </div>

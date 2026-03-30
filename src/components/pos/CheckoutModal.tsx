@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePosStore } from '@/store/posStore';
 import { submitCheckout, CheckoutPayload } from '@/lib/api';
 import { X, CreditCard, Banknote, CheckCircle, Loader2 } from 'lucide-react';
@@ -21,7 +21,9 @@ export function CheckoutModal() {
     isCheckoutOpen, 
     setCheckoutOpen, 
     clearCart, 
-    initData 
+    initData,
+    expressCheckoutTrigger,
+    resetExpressCash
   } = usePosStore();
 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
@@ -44,8 +46,6 @@ export function CheckoutModal() {
   } | null>(null);
   
   const [error, setError] = useState<string | null>(null);
-
-  if (!isCheckoutOpen) return null;
 
   const total = cartTotal();
   const subtotal = cartSubtotal();
@@ -71,11 +71,15 @@ export function CheckoutModal() {
   const formattedTax = formatCurrency(taxVal);
   const formattedChange = formatCurrency(change);
 
-  const handleCheckout = async () => {
-    if (!isReadyToPay || cart.length === 0) return;
+  const handleCheckout = async (isExpress = false) => {
+    if ((!isReadyToPay && !isExpress) || cart.length === 0) return;
 
     setIsSubmitting(true);
     setError(null);
+
+    const expressAmount = total;
+    const effectiveMethod = isExpress ? 'cash' : paymentMethod;
+    const effectiveTendered = isExpress ? expressAmount : tendered;
 
     const payload: CheckoutPayload = {
       customer_id: customerId || 1, // 1 is Walk-in typical ID
@@ -92,8 +96,8 @@ export function CheckoutModal() {
       })),
       payment: [
         {
-          method: paymentMethod,
-          amount: paymentMethod === 'cash' && tendered > total ? total : tendered,
+          method: effectiveMethod,
+          amount: effectiveMethod === 'cash' && effectiveTendered > total ? total : effectiveTendered,
         }
       ],
       total_before_tax: subtotal,
@@ -149,6 +153,15 @@ export function CheckoutModal() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (isCheckoutOpen && expressCheckoutTrigger && !isSubmitting && !successData && cart.length > 0) {
+      resetExpressCash();
+      handleCheckout(true);
+    }
+  }, [isCheckoutOpen, expressCheckoutTrigger, isSubmitting, successData, cart.length, resetExpressCash]);
+
+  if (!isCheckoutOpen) return null;
 
   if (successData) {
     return (
@@ -304,7 +317,7 @@ export function CheckoutModal() {
 
             <div className="mt-auto">
               <button 
-                onClick={handleCheckout}
+                onClick={() => handleCheckout()}
                 disabled={!isReadyToPay || isSubmitting}
                 className={`w-full py-4 rounded-xl text-[17px] font-semibold shadow-sm transition-all apple-btn flex items-center justify-center ${
                   !isReadyToPay 
