@@ -7,6 +7,7 @@ import { Cart } from '@/components/pos/Cart';
 import { CheckoutModal } from '@/components/pos/CheckoutModal';
 import { PosInitializer } from '@/components/pos/PosInitializer';
 import { OfflineSyncManager } from '@/components/pos/OfflineSyncManager';
+import { SettingsModal } from '@/components/pos/SettingsModal';
 
 export default function PosPage() {
   return (
@@ -27,6 +28,9 @@ export default function PosPage() {
 
         {/* Checkout Modal Overlay */}
         <CheckoutModal />
+
+        {/* Settings Modal Overlay */}
+        <SettingsModal />
       </main>
     </QueryClientProvider>
   );

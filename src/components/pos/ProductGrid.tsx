@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchCatalog, fetchTaxonomies } from '@/lib/api';
 import { ProductCard } from './ProductCard';
-import { Search, Filter, X } from 'lucide-react';
+import { Search, Filter, X, Settings } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { usePosStore } from '@/store/posStore';
@@ -15,6 +15,7 @@ export function ProductGrid() {
   const [showFilters, setShowFilters] = useState(false);
   
   const locationId = usePosStore(state => state.initData?.location_id);
+  const setSettingsOpen = usePosStore(state => state.setSettingsOpen);
   
   // React Query: Fetches catalog ONCE and caches it locally (IndexedDB prepped)
   const { data: catalogData, isLoading: catalogLoading, error: catalogError } = useQuery({
@@ -195,6 +196,16 @@ export function ProductGrid() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 autoFocus
               />
+            </div>
+            
+            <div className="flex items-center gap-2 ml-4">
+              <button 
+                onClick={() => setSettingsOpen(true)}
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-black/5 hover:border-black/10 transition-all shadow-sm apple-btn text-[#1d1d1f]"
+                title="Terminal Settings"
+              >
+                <Settings className="w-5 h-5 text-[#86868b]" />
+              </button>
             </div>
           </div>
           

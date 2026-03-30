@@ -37,6 +37,8 @@ interface PosState {
   setCustomerId: (id: number | null) => void;
   isCheckoutOpen: boolean;
   setCheckoutOpen: (isOpen: boolean) => void;
+  isSettingsOpen: boolean;
+  setSettingsOpen: (isOpen: boolean) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
@@ -55,6 +57,8 @@ export const usePosStore = create<PosState>((set, get) => ({
   setCustomerId: (id) => set({ customerId: id }),
   isCheckoutOpen: false,
   setCheckoutOpen: (isOpen) => set({ isCheckoutOpen: isOpen }),
+  isSettingsOpen: false,
+  setSettingsOpen: (isOpen) => set({ isSettingsOpen: isOpen }),
   
   addToCart: (product) => {
     set((state) => {
