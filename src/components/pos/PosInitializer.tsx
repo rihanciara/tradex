@@ -40,7 +40,10 @@ export function PosInitializer() {
              </svg>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Initialization Failed</h2>
-          <p className="text-gray-600">Could not connect to the backend API. Please check your connection and try again.</p>
+          <p className="text-gray-600 font-medium mb-1">Could not initialize the Point of Sale system:</p>
+          <div className="bg-red-100 p-3 rounded text-red-700 text-sm font-mono mt-3 break-words text-left">
+             {(error as any)?.response?.data?.msg || (error as any)?.response?.data?.message || error?.message || "Unknown Network Error"}
+          </div>
         </div>
       </div>
     );
