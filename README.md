@@ -31,10 +31,10 @@ Create a `.env.local` file in the root of this `tradex` folder and set the backe
 
 ```env
 # Local Backend Example:
-NEXT_PUBLIC_API_URL=http://fwcv3.test/api/jerryupdates/v1
+NEXT_PUBLIC_API_URL=http://fwcv3.test/api/v1
 
 # Production Backend Example:
-# NEXT_PUBLIC_API_URL=https://app12.dookanwale.com/api/jerryupdates/v1
+# NEXT_PUBLIC_API_URL=https://app12.dookanwale.com/api/v1
 ```
 
 ## 🛠️ Local Development
