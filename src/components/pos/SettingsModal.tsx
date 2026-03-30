@@ -23,11 +23,12 @@ export function SettingsModal() {
         // Redirection completely leaves the Next.js realm and creates Laravel session
         window.location.href = response.data.data.sso_url;
       } else {
-        alert("Failed to securely generate dashboard link.");
+        const msg = response.data?.message || 'Unknown error generating SSO link.';
+        alert("Dashboard link failed: " + msg);
       }
-    } catch (err) {
-      console.error("SSO Bridge error", err);
-      alert("Failed to securely generate dashboard link.");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Network error.';
+      alert("SSO Error: " + msg);
     } finally {
       setIsSsoLoading(false);
     }
