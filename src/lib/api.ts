@@ -101,16 +101,42 @@ interface CatalogResponse {
 
 export const fetchCatalog = async (locationId?: number): Promise<CatalogResponse> => {
   try {
-    const response = await apiClient.get<CatalogResponse>('/pos/catalog', {
-      params: { location_id: locationId },
-    });
-    if (response.data?.success) {
-      await setVal(STORES.CATALOG, 'all', response.data);
+    let allProducts: Product[] = [];
+    let offset = 0;
+    let hasMore = true;
+    const limit = 1000;
+
+    while (hasMore) {
+      const response = await apiClient.get<CatalogResponse>('/pos/catalog', {
+        params: { 
+          location_id: locationId,
+          offset: offset,
+          limit: limit
+        },
+      });
+
+      if (response.data?.success) {
+        allProducts = [...allProducts, ...response.data.data];
+        hasMore = response.data.has_more;
+        offset += limit;
+      } else {
+        hasMore = false;
+      }
     }
-    return response.data;
+
+    const finalResponse: CatalogResponse = {
+      success: true,
+      data: allProducts,
+      count: allProducts.length,
+      offset: 0,
+      has_more: false
+    };
+
+    await setVal(STORES.CATALOG, 'all', finalResponse);
+    return finalResponse;
   } catch (err) {
     const cached = await getVal(STORES.CATALOG, 'all');
-    if (cached) return cached;
+    if (cached) return cached as CatalogResponse;
     throw err;
   }
 };

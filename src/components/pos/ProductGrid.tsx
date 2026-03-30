@@ -6,16 +6,21 @@ import { ProductCard } from './ProductCard';
 import { Search, Filter, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
+import { usePosStore } from '@/store/posStore';
+
 export function ProductGrid() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   
+  const locationId = usePosStore(state => state.initData?.location_id);
+  
   // React Query: Fetches catalog ONCE and caches it locally (IndexedDB prepped)
   const { data: catalogData, isLoading: catalogLoading, error: catalogError } = useQuery({
-    queryKey: ['catalog'],
-    queryFn: () => fetchCatalog(),
+    queryKey: ['catalog', locationId],
+    queryFn: () => fetchCatalog(locationId || undefined),
+    enabled: !!locationId // Only fetch catalog once the location is known
   });
 
   // React Query: Fetch Taxonomies
@@ -57,7 +62,7 @@ export function ProductGrid() {
     <div className="h-full flex items-center justify-center bg-[#f5f5f7]">
       <div className="flex flex-col items-center">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#1d1d1f] border-t-transparent mb-4"></div>
-        <p className="text-[13px] font-medium text-[#86868b] tracking-wide">Syncing Catalog...</p>
+        <p className="text-[13px] font-medium text-[#86868b] tracking-wide">Downloading Inventory...</p>
       </div>
     </div>
   );
