@@ -28,7 +28,9 @@ export const fetchInit = async (locationId?: number): Promise<InitResponse> => {
       params: { location_id: locationId },
     });
     if (response.data?.success) {
-      await setVal('taxonomies', 'init_data', response.data); // reuse taxonomies store for general config
+      try {
+        await setVal('taxonomies', 'init_data', response.data); // reuse taxonomies store for general config
+      } catch (cacheErr) {}
     }
     return response.data;
   } catch (err) {
@@ -59,7 +61,9 @@ export const fetchTaxonomies = async (): Promise<TaxonomiesResponse> => {
   try {
     const response = await apiClient.get<TaxonomiesResponse>('/pos/taxonomies');
     if (response.data?.success) {
-      await setVal(STORES.TAXONOMIES, 'all', response.data);
+      try {
+        await setVal(STORES.TAXONOMIES, 'all', response.data);
+      } catch (cacheErr) {}
     }
     return response.data;
   } catch (err) {
@@ -132,7 +136,12 @@ export const fetchCatalog = async (locationId?: number): Promise<CatalogResponse
       has_more: false
     };
 
-    await setVal(STORES.CATALOG, 'all', finalResponse);
+    try {
+      await setVal(STORES.CATALOG, 'all', finalResponse);
+    } catch (cacheErr) {
+      console.warn("Failed to cache POS catalog locally (browser storage may be full):", cacheErr);
+    }
+    
     return finalResponse;
   } catch (err) {
     const cached = await getVal(STORES.CATALOG, 'all');
@@ -162,7 +171,9 @@ export const fetchCustomers = async (search?: string): Promise<CustomerResponse>
     });
     if (response.data?.success && !search) {
       // Only cache the default initial customer list
-      await setVal(STORES.CUSTOMERS, 'default', response.data);
+      try {
+        await setVal(STORES.CUSTOMERS, 'default', response.data);
+      } catch (cacheErr) {}
     }
     return response.data;
   } catch (err) {

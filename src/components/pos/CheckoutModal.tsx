@@ -54,7 +54,8 @@ export function CheckoutModal() {
 
   const tendered = parseFloat(amountTendered) || 0;
   const change = paymentMethod === 'cash' ? Math.max(0, tendered - total) : 0;
-  const isReadyToPay = paymentMethod === 'card' || (paymentMethod === 'cash' && tendered >= total);
+  
+  const isReadyToPay = amountTendered !== '' && tendered >= 0 && (paymentMethod === 'cash' || tendered <= total);
 
   const currencyCode = initData?.business?.currency_code || 'USD';
   const currencySymbol = initData?.business?.currency_symbol || '$';
@@ -92,7 +93,7 @@ export function CheckoutModal() {
       payment: [
         {
           method: paymentMethod,
-          amount: total,
+          amount: paymentMethod === 'cash' && tendered > total ? total : tendered,
         }
       ],
       total_before_tax: subtotal,
@@ -115,7 +116,7 @@ export function CheckoutModal() {
           discount: discountVal,
           tax: taxVal,
           total: total,
-          tendered: paymentMethod === 'cash' ? tendered : total,
+          tendered: tendered,
           change: change,
           paymentMethod: paymentMethod === 'cash' ? 'Cash' : 'Card'
         });
@@ -258,47 +259,42 @@ export function CheckoutModal() {
               </button>
             </div>
 
-            {/* Cash Tendered Input */}
-            {paymentMethod === 'cash' && (
-              <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <label className="block text-[13px] font-medium text-[#86868b] mb-2 px-1">Amount Tendered</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[20px] font-bold text-[#1d1d1f]">{currencySymbol}</span>
-                  <input 
-                    type="number"
-                    value={amountTendered}
-                    onChange={(e) => setAmountTendered(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full bg-[#f5f5f7] border-none rounded-xl py-4 pl-10 pr-4 text-[24px] font-bold text-[#1d1d1f] placeholder-[#86868b]/30 focus:ring-2 focus:ring-[#0071e3]/30 transition-all apple-input"
-                    min={total}
-                    step="0.01"
-                    autoFocus
-                  />
+            {/* Universal Amount Tendered Input */}
+            <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <label className="block text-[13px] font-medium text-[#86868b] mb-2 px-1">Amount to Charge</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[20px] font-bold text-[#1d1d1f]">{currencySymbol}</span>
+                <input 
+                  type="number"
+                  value={amountTendered}
+                  onChange={(e) => setAmountTendered(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-[#f5f5f7] border-none rounded-xl py-4 pl-10 pr-4 text-[24px] font-bold text-[#1d1d1f] placeholder-[#86868b]/30 focus:ring-2 focus:ring-[#0071e3]/30 transition-all apple-input"
+                  min={0}
+                  step="0.01"
+                  autoFocus
+                />
+              </div>
+              
+              {paymentMethod === 'cash' && amountTendered && tendered > total && (
+                <div className="mt-6 flex justify-between items-center p-5 bg-[#34c759]/10 rounded-xl border border-[#34c759]/20">
+                  <span className="text-[17px] font-semibold text-[#1d1d1f]">Change Due</span>
+                  <span className="text-[24px] font-bold text-[#34c759]">{formattedChange}</span>
                 </div>
-                
-                {amountTendered && tendered >= total && (
-                  <div className="mt-6 flex justify-between items-center p-5 bg-[#34c759]/10 rounded-xl border border-[#34c759]/20">
-                    <span className="text-[17px] font-semibold text-[#1d1d1f]">Change Due</span>
-                    <span className="text-[24px] font-bold text-[#34c759]">{formattedChange}</span>
-                  </div>
-                )}
-                
-                {amountTendered && tendered < total && (
-                  <div className="mt-4 p-3 bg-[#ff3b30]/10 rounded-xl">
-                    <p className="text-[#ff3b30] text-[13px] font-medium text-center">Amount tendered must be at least {formattedTotal}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Card Instructions Dummy */}
-            {paymentMethod === 'card' && (
-              <div className="mb-8 flex-1 flex flex-col items-center justify-center p-8 bg-[#f5f5f7]/50 rounded-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <CreditCard className="w-12 h-12 text-[#86868b] mb-4 opacity-50" />
-                <p className="text-[17px] font-semibold text-[#1d1d1f] text-center">Ready for Card Payment</p>
-                <p className="text-[13px] text-[#86868b] font-medium mt-1 text-center">The total {formattedTotal} will be charged to the card.</p>
-              </div>
-            )}
+              )}
+              
+              {amountTendered && tendered < total && (
+                <div className="mt-4 p-3 bg-[#ff9500]/10 border border-[#ff9500]/20 rounded-xl">
+                  <p className="text-[#ff9500] text-[13px] font-medium text-center">Partial Payment: The remaining balance will be marked as Due.</p>
+                </div>
+              )}
+              
+              {paymentMethod === 'card' && amountTendered && tendered > total && (
+                <div className="mt-4 p-3 bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-xl">
+                  <p className="text-[#ff3b30] text-[13px] font-medium text-center">Cannot charge a card more than the total order amount.</p>
+                </div>
+              )}
+            </div>
 
             {error && (
               <div className="mb-4 p-3 bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-xl">
