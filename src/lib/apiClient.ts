@@ -2,7 +2,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 // The Laravel Backend API Base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://fwcv3.test/api/jerryupdates/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://app12.dookanwale.com/api/v1';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
