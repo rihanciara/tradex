@@ -245,3 +245,20 @@ export const submitCheckout = async (payload: CheckoutPayload): Promise<Checkout
     throw err;
   }
 };
+
+export interface CreateCustomerPayload {
+  name: string;
+  mobile: string;
+}
+
+export interface CreateCustomerResponse {
+  success: boolean;
+  message: string;
+  data?: Customer;
+}
+
+export const createCustomer = async (payload: CreateCustomerPayload): Promise<CreateCustomerResponse> => {
+  const response = await apiClient.post<CreateCustomerResponse>('/pos/customers', payload);
+  return response.data;
+};
+

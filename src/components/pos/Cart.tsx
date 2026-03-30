@@ -1,7 +1,7 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { Minus, Plus, ShoppingCart, Apple, Tag, Receipt, FastForward } from 'lucide-react';
+import { Minus, Plus, ShoppingCart, CreditCard, Tag, Receipt, FastForward } from 'lucide-react';
 import { CustomerSelect } from './CustomerSelect';
 import { useState } from 'react';
 
@@ -26,7 +26,7 @@ export function Cart() {
   } = usePosStore();
 
   const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [tempDiscountType, setTempDiscountType] = useState<'fixed' | 'percentage'>('percentage');
+  const [tempDiscountType, setTempDiscountType] = useState<'fixed' | 'percentage'>('fixed');
   const [tempDiscountAmount, setTempDiscountAmount] = useState<string>('');
 
   const currencyCode = initData?.business?.currency_code || 'USD';
@@ -204,13 +204,23 @@ export function Cart() {
               Review Order
             </button>
             
-            {/* Express Cash Button */}
-            <button 
-              onClick={() => triggerExpressCash()}
-              disabled={cart.length === 0}
-              className="w-full bg-[#34c759] hover:bg-[#28a745] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
-              <FastForward className="w-5 h-5 mr-1.5" /> Express Cash
-            </button>
+            <div className="flex gap-3">
+              {/* Apple Pay / Card Secondary */}
+              <button 
+                onClick={() => setCheckoutOpen(true)}
+                disabled={cart.length === 0}
+                className="flex-1 bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+                <CreditCard className="w-5 h-5 mr-1.5" /> Pay
+              </button>
+              
+              {/* Express Cash Button */}
+              <button 
+                onClick={() => triggerExpressCash()}
+                disabled={cart.length === 0}
+                className="flex-1 bg-[#34c759] hover:bg-[#28a745] text-white font-semibold py-3.5 rounded-2xl text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+                <FastForward className="w-5 h-5 mr-1.5" /> Cash
+              </button>
+            </div>
           </div>
         </div>
       </div>
