@@ -66,6 +66,7 @@ export function OfflineSyncManager() {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline-sync-queued', checkQueue);
 
     // Periodically check queue just in case
     const interval = setInterval(() => {
@@ -76,6 +77,7 @@ export function OfflineSyncManager() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('offline-sync-queued', checkQueue);
       clearInterval(interval);
     };
   }, []);

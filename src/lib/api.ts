@@ -235,6 +235,11 @@ export const submitCheckout = async (payload: CheckoutPayload): Promise<Checkout
       // Offline: push to sync queue
       await addToQueue(STORES.SYNC_QUEUE, payload);
       
+      // Dispatch custom event to notify OfflineSyncManager to update its badge
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('offline-sync-queued'));
+      }
+      
       return {
         success: true,
         message: 'Saved offline. Will sync when connection is restored.',
