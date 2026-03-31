@@ -25,9 +25,6 @@ export function Cart() {
     initData 
   } = usePosStore();
 
-  const [showDiscountModal, setShowDiscountModal] = useState(false);
-  const [tempDiscountType, setTempDiscountType] = useState<'fixed' | 'percentage'>('fixed');
-  const [tempDiscountAmount, setTempDiscountAmount] = useState<string>('');
 
   const currencyCode = initData?.business?.currency_code || 'USD';
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', {
@@ -35,15 +32,6 @@ export function Cart() {
     currency: currencyCode,
   }).format(val);
 
-  const applyDiscount = () => {
-    const val = parseFloat(tempDiscountAmount);
-    if (!isNaN(val) && val > 0) {
-      setCartDiscount(tempDiscountType, val);
-    } else {
-      setCartDiscount(null, 0);
-    }
-    setShowDiscountModal(false);
-  };
 
   if (cart.length === 0) {
     return (
@@ -114,32 +102,32 @@ export function Cart() {
               </div>
 
               {/* Minimal Quantity Controls */}
-              <div className="flex justify-between items-center mt-4">
-                <div className="flex items-center bg-white border border-black/5 rounded-full shadow-sm px-1 py-1">
+              <div className="flex justify-between items-center mt-2">
+                <div className="flex items-center bg-white border border-black/5 rounded-full shadow-sm px-1 py-0.5">
                   <button 
                     onClick={() => updateQuantity(item.cart_id, Math.max(1, item.quantity - 1))}
-                    className="w-7 h-7 flex items-center justify-center rounded-full text-[#1d1d1f] hover:bg-[#f5f5f7] apple-btn"
+                    className="w-6 h-6 flex items-center justify-center rounded-full text-[#1d1d1f] hover:bg-[#f5f5f7] apple-btn"
                   >
-                    <Minus className="w-3.5 h-3.5" />
+                    <Minus className="w-3 h-3" />
                   </button>
                   <input 
                     type="number" 
                     value={item.quantity}
                     onChange={(e) => updateQuantity(item.cart_id, Math.max(1, Number(e.target.value)))}
-                    className="w-10 text-center text-[15px] font-semibold text-[#1d1d1f] bg-transparent border-none focus:ring-0 p-0"
+                    className="w-8 text-center text-[13px] font-semibold text-[#1d1d1f] bg-transparent border-none focus:ring-0 p-0"
                     min="1"
                   />
                   <button 
                     onClick={() => updateQuantity(item.cart_id, item.quantity + 1)}
-                    className="w-7 h-7 flex items-center justify-center rounded-full text-[#1d1d1f] hover:bg-[#f5f5f7] apple-btn"
+                    className="w-6 h-6 flex items-center justify-center rounded-full text-[#1d1d1f] hover:bg-[#f5f5f7] apple-btn"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3" />
                   </button>
                 </div>
 
                 <button 
                   onClick={() => removeFromCart(item.cart_id)}
-                  className="text-[13px] text-[#0071e3] hover:text-[#0077ed] font-medium apple-btn px-2"
+                  className="text-[11px] text-[#ff3b30] hover:text-[#ff0000] font-medium apple-btn px-2"
                 >
                   Remove
                 </button>
@@ -154,139 +142,95 @@ export function Cart() {
         
         {/* Actions Bar (Discount / Tax) */}
         <div className="flex border-b border-black/5">
-          <button 
-            onClick={() => {
-              setTempDiscountType(cartDiscountType || 'percentage');
-              setTempDiscountAmount(cartDiscountAmount ? cartDiscountAmount.toString() : '');
-              setShowDiscountModal(true);
-            }}
-            className="flex-1 py-3 flex items-center justify-center gap-2 text-[14px] font-medium text-[#0071e3] hover:bg-[#0071e3]/5 transition-colors"
-          >
-            <Tag className="w-4 h-4" />
-            {cartDiscountValue() > 0 ? `Discount (-${formatCurrency(cartDiscountValue())})` : 'Add Discount'}
-          </button>
+          <div className="flex-1 py-1 px-3 flex flex-col justify-center border-r border-black/5">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1">
+                <Tag className="w-3 h-3" /> Discount
+              </label>
+              {cartDiscountValue() > 0 && (
+                <button 
+                  onClick={() => setCartDiscount(null, 0)}
+                  className="text-[10px] text-[#ff3b30] hover:text-[#ff0000] font-medium"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-[14px] font-medium text-[#86868b]">{initData?.business?.currency_symbol || '$'}</span>
+              <input 
+                type="number"
+                value={cartDiscountAmount || ''}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!isNaN(val) && val >= 0) {
+                    setCartDiscount('fixed', val);
+                  } else {
+                    setCartDiscount(null, 0);
+                  }
+                }}
+                placeholder="0.00"
+                className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-[#1d1d1f] focus:ring-0 placeholder-[#86868b]/30"
+              />
+            </div>
+          </div>
           
-          <div className="w-px bg-black/5"></div>
-          
-          <div className="flex-1 relative group">
+          <div className="flex-1 py-1 px-3 flex flex-col justify-center relative group">
+            <label className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider flex items-center gap-1 mb-1">
+              <Receipt className="w-3 h-3" /> Tax
+            </label>
             <select
               value={cartTaxId || ''}
               onChange={(e) => setCartTaxId(e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full h-full appearance-none bg-transparent cursor-pointer text-center text-[14px] font-medium text-[#1d1d1f] hover:bg-black/5 transition-colors outline-none focus:ring-0"
-              style={{ textAlignLast: 'center' }}
+              className="w-full h-full appearance-none bg-transparent cursor-pointer text-[14px] font-medium text-[#1d1d1f] hover:bg-black/5 transition-colors outline-none focus:ring-0 p-0"
             >
-              <option value="">No Cart Tax</option>
+              <option value="">No Tax</option>
               {initData?.tax_rates?.map(tax => (
                 <option key={tax.id} value={tax.id}>{tax.name} ({tax.amount}%)</option>
               ))}
             </select>
-            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-              <Receipt className="w-4 h-4 text-[#86868b]" />
-            </div>
           </div>
         </div>
 
         {/* Totals & Buttons */}
-        <div className="p-6 pb-8">
-          <div className="flex justify-between items-baseline mb-5 px-1">
-            <span className="text-[17px] text-[#1d1d1f] font-medium">Total</span>
-            <span className="text-[28px] font-bold text-[#1d1d1f] tracking-tight">
+        <div className="p-4 md:p-6 pb-6 md:pb-8">
+          <div className="flex justify-between items-baseline mb-4 px-1">
+            <span className="text-[15px] md:text-[17px] text-[#1d1d1f] font-medium">Total</span>
+            <span className="text-[24px] md:text-[28px] font-bold text-[#1d1d1f] tracking-tight">
               {formatCurrency(cartTotal())}
             </span>
           </div>
           
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {/* Main Checkout Button */}
             <button 
               onClick={() => setCheckoutOpen(true)}
               disabled={cart.length === 0}
-              className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3.5 rounded-2xl text-[17px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+              className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[15px] md:text-[17px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
               Review Order
             </button>
             
-            <div className="flex gap-3">
+            <div className="flex gap-2 md:gap-3">
               {/* Apple Pay / Card Secondary */}
               <button 
                 onClick={() => setCheckoutOpen(true)}
                 disabled={cart.length === 0}
-                className="flex-1 bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3.5 rounded-2xl text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
-                <CreditCard className="w-5 h-5 mr-1.5" /> Pay
+                className="flex-1 bg-[#1d1d1f] hover:bg-black text-white font-semibold py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[14px] md:text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+                <CreditCard className="w-4 h-4 md:w-5 md:h-5 mr-1.5" /> Pay
               </button>
               
               {/* Express Cash Button */}
               <button 
                 onClick={() => triggerExpressCash()}
                 disabled={cart.length === 0}
-                className="flex-1 bg-[#34c759] hover:bg-[#28a745] text-white font-semibold py-3.5 rounded-2xl text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
-                <FastForward className="w-5 h-5 mr-1.5" /> Cash
+                className="flex-1 bg-[#34c759] hover:bg-[#28a745] text-white font-semibold py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[14px] md:text-[16px] shadow-sm apple-btn flex items-center justify-center disabled:opacity-50">
+                <FastForward className="w-4 h-4 md:w-5 md:h-5 mr-1.5" /> Cash
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Discount Modal Overlay */}
-      {showDiscountModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-black/5 flex justify-between items-center">
-              <h3 className="font-semibold text-[#1d1d1f] text-[17px]">Apply Discount</h3>
-            </div>
-            
-            <div className="p-6">
-              <div className="flex bg-[#f5f5f7] rounded-xl p-1 mb-6">
-                <button 
-                  onClick={() => setTempDiscountType('percentage')}
-                  className={`flex-1 py-2 text-[14px] font-medium rounded-lg transition-colors ${tempDiscountType === 'percentage' ? 'bg-white shadow-sm text-[#1d1d1f]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
-                >
-                  Percentage (%)
-                </button>
-                <button 
-                  onClick={() => setTempDiscountType('fixed')}
-                  className={`flex-1 py-2 text-[14px] font-medium rounded-lg transition-colors ${tempDiscountType === 'fixed' ? 'bg-white shadow-sm text-[#1d1d1f]' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
-                >
-                  Fixed Amount
-                </button>
-              </div>
-
-              <div className="relative">
-                {tempDiscountType === 'fixed' && (
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[17px] font-medium text-[#86868b]">{initData?.business?.currency_symbol || '$'}</span>
-                )}
-                <input 
-                  type="number"
-                  value={tempDiscountAmount}
-                  onChange={(e) => setTempDiscountAmount(e.target.value)}
-                  placeholder="0"
-                  className={`w-full bg-[#f5f5f7] border border-transparent focus:border-[#0071e3]/30 focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 rounded-xl py-3 text-[17px] font-medium text-[#1d1d1f] transition-all outline-none ${tempDiscountType === 'fixed' ? 'pl-8' : 'pl-4'}`}
-                  autoFocus
-                />
-                {tempDiscountType === 'percentage' && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[17px] font-medium text-[#86868b]">%</span>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 bg-[#fbfbfd] border-t border-black/5 flex gap-3">
-              <button 
-                onClick={() => {
-                  setCartDiscount(null, 0);
-                  setShowDiscountModal(false);
-                }}
-                className="flex-1 py-3 bg-white border border-black/10 hover:bg-[#f5f5f7] rounded-xl text-[#ff3b30] font-medium text-[15px] transition-colors"
-              >
-                Remove
-              </button>
-              <button 
-                onClick={applyDiscount}
-                className="flex-1 py-3 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-xl font-medium text-[15px] transition-colors shadow-sm"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
