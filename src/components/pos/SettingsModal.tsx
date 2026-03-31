@@ -148,7 +148,7 @@ export function SettingsModal() {
           </div>
 
           {/* Register Management Section */}
-          {initData?.register?.is_open && (
+          {initData?.register?.is_open && initData?.business?.cash_register_enabled !== false && (
             <div className="pt-2">
               <button
                 onClick={() => {

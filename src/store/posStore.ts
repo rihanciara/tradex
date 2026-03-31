@@ -52,6 +52,12 @@ interface PosState {
   expressCheckoutTrigger: boolean;
   triggerExpressCash: () => void;
   resetExpressCash: () => void;
+
+  // Keyboard Navigation
+  focusZone: 'search' | 'grid' | 'cart' | 'checkout';
+  setFocusZone: (zone: 'search' | 'grid' | 'cart' | 'checkout') => void;
+  isKeyboardHelpOpen: boolean;
+  setKeyboardHelpOpen: (open: boolean) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
@@ -86,6 +92,11 @@ export const usePosStore = create<PosState>((set, get) => ({
   expressCheckoutTrigger: false,
   triggerExpressCash: () => set({ expressCheckoutTrigger: true, isCheckoutOpen: true }),
   resetExpressCash: () => set({ expressCheckoutTrigger: false }),
+
+  focusZone: 'search',
+  setFocusZone: (zone) => set({ focusZone: zone }),
+  isKeyboardHelpOpen: false,
+  setKeyboardHelpOpen: (open) => set({ isKeyboardHelpOpen: open }),
   
   addToCart: (product) => {
     set((state) => {

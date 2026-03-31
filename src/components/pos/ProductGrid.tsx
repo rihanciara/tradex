@@ -4,73 +4,149 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchCatalog, fetchTaxonomies } from '@/lib/api';
 import { ProductCard } from './ProductCard';
 import { Search, Filter, X, Settings, Receipt } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 
 import { usePosStore } from '@/store/posStore';
 
-export function ProductGrid() {
+export interface ProductGridHandle {
+  focusSearch: () => void;
+}
+
+export const ProductGrid = forwardRef<ProductGridHandle>((_, ref) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
-  
+  const [focusedProductIndex, setFocusedProductIndex] = useState<number | null>(null);
+
   const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
-  
+
   const locationId = usePosStore(state => state.initData?.location_id);
   const setSettingsOpen = usePosStore(state => state.setSettingsOpen);
   const setRecentSalesOpen = usePosStore(state => state.setRecentSalesOpen);
-  
-  // React Query: Fetches catalog ONCE and caches it locally (IndexedDB prepped)
+  const addToCart = usePosStore(state => state.addToCart);
+  const focusZone = usePosStore(state => state.focusZone);
+  const setFocusZone = usePosStore(state => state.setFocusZone);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const focusedCardRef = useRef<HTMLDivElement>(null);
+
+  // Expose handle so the parent can wire the keyboard hook
+  useImperativeHandle(ref, () => ({
+    focusSearch: () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+  }));
+
   const { data: catalogData, isLoading: catalogLoading, error: catalogError } = useQuery({
     queryKey: ['catalog', locationId],
     queryFn: () => fetchCatalog(locationId || undefined),
-    enabled: !!locationId // Only fetch catalog once the location is known
+    enabled: !!locationId
   });
 
-  // React Query: Fetch Taxonomies
   const { data: taxonomiesData } = useQuery({
     queryKey: ['taxonomies'],
     queryFn: () => fetchTaxonomies(),
   });
 
-  // 0ms Latency Client-Side Search and Filter
   const filteredProducts = useMemo(() => {
     if (!catalogData?.data) return [];
-    
     let result = catalogData.data;
-
-    // Apply Taxonomy Filters
-    if (selectedCategory) {
-      result = result.filter(product => product.category === selectedCategory);
-    }
-    if (selectedBrand) {
-      result = result.filter(product => product.brand === selectedBrand);
-    }
-
-    // Apply Alphabet Filter
+    if (selectedCategory) result = result.filter(p => p.category === selectedCategory);
+    if (selectedBrand) result = result.filter(p => p.brand === selectedBrand);
     if (activeLetter) {
-      if (activeLetter === '#') {
-        result = result.filter(product => /^[^a-zA-Z]/.test(product.product_name));
-      } else {
-        result = result.filter(product => product.product_name.toUpperCase().startsWith(activeLetter));
-      }
+      if (activeLetter === '#') result = result.filter(p => /^[^a-zA-Z]/.test(p.product_name));
+      else result = result.filter(p => p.product_name.toUpperCase().startsWith(activeLetter));
     }
-
-    // Apply Search Term
     if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter(product => {
-        return (
-          product.product_name.toLowerCase().includes(lowerSearch) ||
-          (product.variation_sku && product.variation_sku.toLowerCase().includes(lowerSearch)) ||
-          (product.product_sku && product.product_sku.toLowerCase().includes(lowerSearch))
-        );
-      });
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(p =>
+        p.product_name.toLowerCase().includes(lower) ||
+        (p.variation_sku && p.variation_sku.toLowerCase().includes(lower)) ||
+        (p.product_sku && p.product_sku.toLowerCase().includes(lower))
+      );
     }
-
     return result;
   }, [catalogData, searchTerm, selectedCategory, selectedBrand, activeLetter]);
+
+  const visibleProducts = filteredProducts.slice(0, 100);
+
+  // Scroll focused card into view
+  useEffect(() => {
+    if (focusedProductIndex !== null) {
+      focusedCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [focusedProductIndex]);
+
+  // Reset focus when search changes
+  useEffect(() => {
+    setFocusedProductIndex(null);
+  }, [searchTerm, selectedCategory, selectedBrand, activeLetter]);
+
+  // ---------- Keyboard handlers exposed to the parent hook ----------
+
+  const handleGridNavigate = useCallback((delta: number) => {
+    setFocusedProductIndex(prev => {
+      const count = visibleProducts.length;
+      if (count === 0) return null;
+      if (delta === 0) return 0; // initial focus
+      const current = prev ?? -1;
+      const next = current + delta;
+      if (next < 0) {
+        // Go back to search
+        setFocusZone('search');
+        setTimeout(() => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        }, 0);
+        return null;
+      }
+      return Math.min(next, count - 1);
+    });
+  }, [visibleProducts.length, setFocusZone]);
+
+  const handleGridEnter = useCallback(() => {
+    if (focusedProductIndex !== null && visibleProducts[focusedProductIndex]) {
+      addToCart(visibleProducts[focusedProductIndex]);
+      // Flash feedback
+      setTimeout(() => { /* card will animate */ }, 0);
+    } else if (visibleProducts.length === 1) {
+      // Auto-add single search result (barcode scanner workflow)
+      addToCart(visibleProducts[0]);
+      setSearchTerm('');
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [focusedProductIndex, visibleProducts, addToCart]);
+
+  // Barcode scanner: Enter in search when single result → add immediately
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && visibleProducts.length === 1) {
+      e.preventDefault();
+      addToCart(visibleProducts[0]);
+      setSearchTerm('');
+      return;
+    }
+    if (e.key === 'ArrowDown' && visibleProducts.length > 0) {
+      e.preventDefault();
+      searchInputRef.current?.blur();
+      setFocusZone('grid');
+      setFocusedProductIndex(0);
+    }
+    if (e.key === 'F2') {
+      e.preventDefault();
+      // Jump to cart — handled by global hook but also work from input
+    }
+  };
+
+  // Pass callbacks up via store-compatible pattern (we call parent from page.tsx)
+  // Expose navigate/enter via data attributes for page.tsx to read
+  useEffect(() => {
+    const el = searchInputRef.current;
+    if (el) (el as any).__gridNavigate = handleGridNavigate;
+    if (el) (el as any).__gridEnter = handleGridEnter;
+  }, [handleGridNavigate, handleGridEnter]);
 
   if (catalogLoading) return (
     <div className="h-full flex items-center justify-center bg-[#f5f5f7]">
@@ -92,7 +168,7 @@ export function ProductGrid() {
       <p className="text-[13px] text-[#86868b] mb-4 text-center px-6">
         {catalogError instanceof Error ? catalogError.message : 'Please check your network or Vercel API settings.'}
       </p>
-      <button 
+      <button
         onClick={() => window.location.reload()}
         className="px-6 py-2 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors"
       >
@@ -106,7 +182,7 @@ export function ProductGrid() {
 
   return (
     <div className="flex h-full bg-[#f5f5f7]">
-      
+
       {/* Optional Left Sidebar for Filters */}
       {showFilters && (
         <div className="w-64 bg-white/80 backdrop-blur-xl border-r border-black/5 flex flex-col h-full z-20 transition-all duration-300">
@@ -116,13 +192,13 @@ export function ProductGrid() {
               <X className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
             {/* Categories */}
             <div>
               <h3 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">Categories</h3>
               <div className="space-y-1">
-                <button 
+                <button
                   onClick={() => setSelectedCategory(null)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-[15px] font-medium transition-colors ${
                     selectedCategory === null ? 'bg-[#0071e3] text-white' : 'text-[#1d1d1f] hover:bg-[#f5f5f7]'
@@ -131,7 +207,7 @@ export function ProductGrid() {
                   All Categories
                 </button>
                 {categories.map(cat => (
-                  <button 
+                  <button
                     key={`cat-${cat.id}`}
                     onClick={() => setSelectedCategory(cat.name)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-[15px] font-medium transition-colors ${
@@ -148,7 +224,7 @@ export function ProductGrid() {
             <div>
               <h3 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">Brands</h3>
               <div className="space-y-1">
-                <button 
+                <button
                   onClick={() => setSelectedBrand(null)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-[15px] font-medium transition-colors ${
                     selectedBrand === null ? 'bg-[#0071e3] text-white' : 'text-[#1d1d1f] hover:bg-[#f5f5f7]'
@@ -157,7 +233,7 @@ export function ProductGrid() {
                   All Brands
                 </button>
                 {brands.map(brand => (
-                  <button 
+                  <button
                     key={`brand-${brand.id}`}
                     onClick={() => setSelectedBrand(brand.name)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-[15px] font-medium transition-colors ${
@@ -170,10 +246,10 @@ export function ProductGrid() {
               </div>
             </div>
           </div>
-          
+
           {(selectedCategory || selectedBrand) && (
             <div className="p-4 border-t border-black/5">
-              <button 
+              <button
                 onClick={() => { setSelectedCategory(null); setSelectedBrand(null); }}
                 className="w-full py-2.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] font-semibold rounded-xl transition-colors text-[13px]"
               >
@@ -186,11 +262,10 @@ export function ProductGrid() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-full min-w-0">
-        {/* Apple-style Mac Search Header */}
         <div className="pt-8 pb-4 px-8 bg-[#f5f5f7]/80 backdrop-blur-xl z-10 sticky top-0 border-b border-black/5">
           <div className="flex items-center gap-4">
             {!showFilters && (
-              <button 
+              <button
                 onClick={() => setShowFilters(true)}
                 className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm border border-black/5 hover:border-black/10 transition-all text-[#1d1d1f]"
               >
@@ -202,24 +277,34 @@ export function ProductGrid() {
                 <Search className="h-4 w-4 text-[#86868b]" />
               </div>
               <input
+                ref={searchInputRef}
                 type="text"
-                className="block w-full pl-10 pr-4 py-2.5 rounded-xl border-none bg-white text-[15px] font-medium text-[#1d1d1f] placeholder-[#86868b] apple-input shadow-sm"
-                placeholder="Search by name, SKU, or scan barcode..."
+                id="pos-search-input"
+                className="block w-full pl-10 pr-4 py-2.5 rounded-xl border-none bg-white text-[15px] font-medium text-[#1d1d1f] placeholder-[#86868b] apple-input shadow-sm focus:ring-2 focus:ring-[#0071e3]/20 transition-all outline-none"
+                placeholder="Search by name, SKU, or scan barcode…  Press / to focus"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setFocusZone('search'); }}
+                onFocus={() => setFocusZone('search')}
+                onKeyDown={handleSearchKeyDown}
                 autoFocus
               />
+              {/* Keyboard hint badge */}
+              {focusZone !== 'search' && (
+                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                  <kbd className="px-2 py-0.5 bg-[#f5f5f7] border border-black/10 rounded text-[11px] font-mono text-[#86868b]">/</kbd>
+                </div>
+              )}
             </div>
-            
+
             <div className="flex items-center gap-2 ml-4">
-              <button 
+              <button
                 onClick={() => setRecentSalesOpen(true)}
                 className="flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-black/5 hover:border-black/10 transition-all shadow-sm apple-btn text-[#1d1d1f]"
                 title="Recent Sales Dashboard"
               >
                 <Receipt className="w-5 h-5 text-[#0071e3]" />
               </button>
-              <button 
+              <button
                 onClick={() => setSettingsOpen(true)}
                 className="flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-black/5 hover:border-black/10 transition-all shadow-sm apple-btn text-[#1d1d1f]"
                 title="Terminal Settings"
@@ -228,7 +313,7 @@ export function ProductGrid() {
               </button>
             </div>
           </div>
-          
+
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h1 className="text-[28px] font-bold tracking-tight text-[#1d1d1f]">
@@ -253,6 +338,7 @@ export function ProductGrid() {
             </div>
             <p className="text-[13px] font-medium text-[#86868b]">
               {filteredProducts.length} items
+              {focusZone === 'grid' && <span className="ml-2 text-[#0071e3]">↑↓←→ navigate · Enter add</span>}
             </p>
           </div>
 
@@ -282,7 +368,7 @@ export function ProductGrid() {
 
         {/* Product Grid */}
         <div className="flex-1 overflow-y-auto px-8 py-6 pb-24">
-          {filteredProducts.length === 0 ? (
+          {visibleProducts.length === 0 ? (
             <div className="text-center py-24">
               <Search className="w-12 h-12 text-[#86868b] mx-auto mb-4 opacity-30" />
               <p className="text-[#1d1d1f] text-[17px] font-semibold">No results found</p>
@@ -291,18 +377,35 @@ export function ProductGrid() {
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-                {filteredProducts.slice(0, 100).map((product) => (
-                  <ProductCard key={product.variation_id} product={product} />
-                ))}
+                {visibleProducts.map((product, index) => {
+                  const isFocused = focusedProductIndex === index;
+                  return (
+                    <div
+                      key={product.variation_id}
+                      ref={isFocused ? focusedCardRef : null}
+                      className={`rounded-2xl transition-all duration-150 ${
+                        isFocused
+                          ? 'ring-2 ring-[#0071e3] ring-offset-2 scale-[1.03] shadow-lg shadow-[#0071e3]/20'
+                          : ''
+                      }`}
+                      onClick={() => {
+                        setFocusedProductIndex(index);
+                        setFocusZone('grid');
+                      }}
+                    >
+                      <ProductCard product={product} />
+                    </div>
+                  );
+                })}
               </div>
-              
+
               {filteredProducts.length > 100 && (
                 <div className="mt-10 mb-6 flex flex-col items-center justify-center p-6 bg-[#f5f5f7]/50 rounded-2xl border border-black/5">
                   <p className="text-[#1d1d1f] text-[15px] font-semibold">
                     Displaying 100 of {new Intl.NumberFormat('en-US').format(filteredProducts.length)} items.
                   </p>
                   <p className="text-[#86868b] text-[13px] font-medium mt-1">
-                    Please use the search bar above or scan a barcode to find specific products.
+                    Use the search bar or scan a barcode to find specific products.
                   </p>
                 </div>
               )}
@@ -312,4 +415,6 @@ export function ProductGrid() {
       </div>
     </div>
   );
-}
+});
+
+ProductGrid.displayName = 'ProductGrid';

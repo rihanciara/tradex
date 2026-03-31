@@ -1,5 +1,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import { nukeAllPosData } from './db';
+import { clearUserScope } from './userScope';
 
 // The Laravel Backend API Base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://app12.dookanwale.com/api/v1';
@@ -10,8 +12,6 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  // Ensure we send cookies for Sanctum authentication
-  // Make sure CORS supports_credentials is true in Laravel
   withCredentials: true,
 });
 
@@ -26,13 +26,23 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor to handle unauthenticated sessions globally
+// Response interceptor — wipe ALL cached POS data before redirecting on 401.
+// This is the critical security gate: if the session expires or an unauthorized
+// request is made, we ensure no stale user data lingers in the browser.
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      // Redirect to login if token expires or is invalid
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        // 🔴 SECURITY: Destroy all cached POS data before logout redirect
+        try {
+          await nukeAllPosData();
+          clearUserScope();
+          console.info('[POS Security] Session expired — all cached data cleared.');
+        } catch (wipeErr) {
+          console.error('[POS Security] Failed to wipe data on 401:', wipeErr);
+        }
+
         Cookies.remove('auth_token');
         window.location.href = '/login';
       }

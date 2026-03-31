@@ -21,9 +21,7 @@ export async function initDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      
-      // We'll use a single key "data" for catalog array, taxonomies array, etc.
-      // For sync queue we use autoIncrement
+
       if (!db.objectStoreNames.contains(STORES.CATALOG)) {
         db.createObjectStore(STORES.CATALOG, { keyPath: 'key' });
       }
@@ -92,5 +90,56 @@ export async function deleteFromQueue(storeName: string, id: number): Promise<vo
     const request = store.delete(id);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * SECURITY: Wipe ALL data stores (catalog, taxonomies, customers).
+ * Called on logout or user switch to prevent data leaks across sessions.
+ * The sync_queue is preserved so offline sales are not lost.
+ */
+export async function nukeAllPosData(): Promise<void> {
+  try {
+    const db = await initDB();
+    const storesToClear = [STORES.CATALOG, STORES.TAXONOMIES, STORES.CUSTOMERS];
+    
+    await Promise.all(storesToClear.map(storeName =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      })
+    ));
+    
+    console.info('[POS Security] All cached data wiped for user session change.');
+  } catch (err) {
+    console.error('[POS Security] Failed to nuke cached data:', err);
+  }
+}
+
+/**
+ * Delete all records whose key starts with the given prefix.
+ * Used for more granular scoped cleanup.
+ */
+export async function clearScopedKeys(storeName: string, prefix: string): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    const req = store.openCursor();
+    req.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        if (String(cursor.key).startsWith(prefix)) {
+          cursor.delete();
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    req.onerror = () => reject(req.error);
   });
 }

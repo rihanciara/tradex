@@ -1,9 +1,7 @@
-"use client"
-
 import { usePosStore } from '@/store/posStore';
 import { Minus, Plus, ShoppingCart, CreditCard, Tag, Receipt, FastForward, Pencil, Check, X } from 'lucide-react';
 import { CustomerSelect } from './CustomerSelect';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 
 // Inline edit field — auto-focuses, commits on blur/Enter, cancels on Escape
 function InlineEdit({
@@ -42,14 +40,20 @@ function InlineEdit({
   );
 }
 
-export function Cart() {
-  const { 
-    cart, 
-    removeFromCart, 
+export interface CartHandle {
+  handleCartNavigate: (delta: number) => void;
+  handleCartAdjustQty: (delta: number) => void;
+  handleCartRemove: () => void;
+}
+
+export const Cart = forwardRef<CartHandle>((_, ref) => {
+  const {
+    cart,
+    removeFromCart,
     updateQuantity,
     updateItemPrice,
     updateItemDiscount,
-    clearCart, 
+    clearCart,
     cartTotal,
     cartSubtotal,
     cartDiscountValue,
@@ -59,16 +63,59 @@ export function Cart() {
     cartDiscountAmount,
     cartDiscountType,
     cartTaxId,
-    setCheckoutOpen, 
+    setCheckoutOpen,
     triggerExpressCash,
-    initData 
+    initData,
+    focusZone,
+    setFocusZone,
   } = usePosStore();
 
-  // Cart-level discount — inline (no modal)
-  const [editingCartDiscount, setEditingCartDiscount] = useState(false);
+  const [focusedCartIndex, setFocusedCartIndex] = useState<number | null>(null);
+  const focusedRowRef = useRef<HTMLDivElement>(null);
 
   // Per-item editing: which cart_id is being edited and which field
   const [editingItem, setEditingItem] = useState<{ cartId: string; field: 'price' | 'discount' } | null>(null);
+
+  // Scroll focused cart row into view
+  useEffect(() => {
+    if (focusedCartIndex !== null && focusedRowRef.current) {
+      focusedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [focusedCartIndex]);
+
+  // Keep focusedCartIndex in bounds when cart changes
+  useEffect(() => {
+    if (focusedCartIndex !== null && focusedCartIndex >= cart.length) {
+      setFocusedCartIndex(cart.length > 0 ? cart.length - 1 : null);
+    }
+  }, [cart.length, focusedCartIndex]);
+
+  // Expose imperative handles to parent (for keyboard hook)
+  useImperativeHandle(ref, () => ({
+    handleCartNavigate: (delta: number) => {
+      setFocusedCartIndex(prev => {
+        if (cart.length === 0) return null;
+        const cur = prev ?? -1;
+        return Math.max(0, Math.min(cart.length - 1, cur + delta));
+      });
+    },
+    handleCartAdjustQty: (delta: number) => {
+      setFocusedCartIndex(prev => {
+        if (prev === null || !cart[prev]) return prev;
+        const item = cart[prev];
+        const newQty = Math.max(1, item.quantity + delta);
+        updateQuantity(item.cart_id, newQty);
+        return prev;
+      });
+    },
+    handleCartRemove: () => {
+      setFocusedCartIndex(prev => {
+        if (prev === null || !cart[prev]) return prev;
+        removeFromCart(cart[prev].cart_id);
+        return null;
+      });
+    },
+  }), [cart, updateQuantity, removeFromCart]);
 
   const currencyCode = initData?.business?.currency_code || 'USD';
   const currencySymbol = initData?.business?.currency_symbol || '$';
@@ -87,6 +134,9 @@ export function Cart() {
     setEditingCartDiscount(false);
   };
 
+  // Cart-level discount — inline (no modal)
+  const [editingCartDiscount, setEditingCartDiscount] = useState(false);
+
   if (cart.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-[#fbfbfd] p-6 apple-glass">
@@ -95,6 +145,7 @@ export function Cart() {
         </div>
         <p className="text-[#1d1d1f] text-[17px] font-semibold tracking-tight">Your cart is empty.</p>
         <p className="text-[#86868b] text-[15px] mt-1.5 font-medium">Scan an item or select a product.</p>
+        <p className="text-[12px] text-[#86868b] mt-3 font-medium">Press <kbd className="px-1.5 py-0.5 bg-[#f5f5f7] border border-black/10 rounded text-[11px] font-mono">/</kbd> to search</p>
       </div>
     );
   }
@@ -103,12 +154,20 @@ export function Cart() {
     <div className="flex flex-col h-full bg-[#fbfbfd] apple-glass shadow-[-20px_0_40px_-20px_rgba(0,0,0,0.05)] border-l border-white/40">
       
       {/* Header */}
-      <div className="pt-8 pb-4 px-6 border-b border-black/5 flex justify-between items-center bg-white/60 backdrop-blur-xl sticky top-0 z-20">
+      <div
+        className="pt-8 pb-4 px-6 border-b border-black/5 flex justify-between items-center bg-white/60 backdrop-blur-xl sticky top-0 z-20"
+        onClick={() => setFocusZone('cart')}
+      >
         <h2 className="text-[24px] font-bold text-[#1d1d1f] tracking-[-0.01em] flex items-center">
           Bag
           <span className="ml-2.5 bg-[#f5f5f7] text-[#1d1d1f] py-0.5 px-2.5 rounded-full text-sm font-semibold border border-black/5">
             {cart.length}
           </span>
+          {focusZone === 'cart' && (
+            <span className="ml-3 text-[11px] font-normal text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full">
+              ↑↓ navigate · +/- qty · Del remove
+            </span>
+          )}
         </h2>
         <button 
           onClick={clearCart}
@@ -126,15 +185,20 @@ export function Cart() {
       {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto px-6 py-2">
         <div className="space-y-1 pt-2">
-          {cart.map((item) => {
+          {cart.map((item, index) => {
             const lineTotal = item.final_price * item.quantity;
             const hasDiscount = (item.item_discount ?? 0) > 0;
             const hasPriceOverride = item.final_price !== item.sell_price_inc_tax;
+            const isFocused = focusedCartIndex === index && focusZone === 'cart';
 
             return (
-              <div 
-                key={item.cart_id} 
-                className="flex flex-col pt-4 pb-4 border-b border-black/5 last:border-0"
+              <div
+                key={item.cart_id}
+                ref={isFocused ? focusedRowRef : null}
+                className={`flex flex-col pt-4 pb-4 border-b border-black/5 last:border-0 rounded-xl px-2 transition-all duration-150 cursor-pointer ${
+                  isFocused ? 'bg-[#0071e3]/5 ring-1 ring-[#0071e3]/30' : 'hover:bg-black/[0.02]'
+                }`}
+                onClick={() => { setFocusedCartIndex(index); setFocusZone('cart'); }}
               >
                 {/* Row 1: Name + Line Total */}
                 <div className="flex justify-between items-start gap-2">
@@ -234,8 +298,8 @@ export function Cart() {
                   </button>
                 </div>
               </div>
-            );
-          })}
+          );
+        })}
         </div>
       </div>
 
@@ -331,4 +395,6 @@ export function Cart() {
 
     </div>
   );
-}
+});
+
+Cart.displayName = 'Cart';

@@ -90,6 +90,11 @@ export function RegisterModal() {
     }
   };
 
+  const isRegisterEnabled = initData?.business?.cash_register_enabled !== false;
+
+  // If the admin has disabled the cash register requirement globally, bypass completely
+  if (!isRegisterEnabled) return null;
+
   if (!isRegisterModalOpen && isRegisterOpen) return null;
 
   // Force open if register is closed

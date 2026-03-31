@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/apiClient';
 import { getVal, setVal, STORES, addToQueue } from './db';
+import { getScopedKey } from './userScope';
 
 export interface PosInitData {
   business: {
@@ -8,6 +9,7 @@ export interface PosInitData {
     currency_symbol: string;
     thousand_separator: string;
     decimal_separator: string;
+    cash_register_enabled?: boolean;
   };
   pos_settings: any;
   location_id: number | null;
@@ -29,12 +31,13 @@ export const fetchInit = async (locationId?: number): Promise<InitResponse> => {
     });
     if (response.data?.success) {
       try {
-        await setVal('taxonomies', 'init_data', response.data); // reuse taxonomies store for general config
+        // Note: init_data is NOT scoped here — PosInitializer handles scope check before caching
+        await setVal(STORES.TAXONOMIES, 'init_data', response.data);
       } catch (cacheErr) {}
     }
     return response.data;
   } catch (err) {
-    const cached = await getVal('taxonomies', 'init_data');
+    const cached = await getVal(STORES.TAXONOMIES, 'init_data');
     if (cached) return cached;
     throw err;
   }
@@ -62,12 +65,12 @@ export const fetchTaxonomies = async (): Promise<TaxonomiesResponse> => {
     const response = await apiClient.get<TaxonomiesResponse>('/pos/taxonomies');
     if (response.data?.success) {
       try {
-        await setVal(STORES.TAXONOMIES, 'all', response.data);
+        await setVal(STORES.TAXONOMIES, getScopedKey('taxonomies_all'), response.data);
       } catch (cacheErr) {}
     }
     return response.data;
   } catch (err) {
-    const cached = await getVal(STORES.TAXONOMIES, 'all');
+    const cached = await getVal(STORES.TAXONOMIES, getScopedKey('taxonomies_all'));
     if (cached) return cached;
     throw err;
   }
@@ -137,14 +140,15 @@ export const fetchCatalog = async (locationId?: number): Promise<CatalogResponse
     };
 
     try {
-      await setVal(STORES.CATALOG, 'all', finalResponse);
+      // ⚠️ Scoped by user — different users will never read each other's catalog
+      await setVal(STORES.CATALOG, getScopedKey('catalog_all'), finalResponse);
     } catch (cacheErr) {
       console.warn("Failed to cache POS catalog locally (browser storage may be full):", cacheErr);
     }
     
     return finalResponse;
   } catch (err) {
-    const cached = await getVal(STORES.CATALOG, 'all');
+    const cached = await getVal(STORES.CATALOG, getScopedKey('catalog_all'));
     if (cached) return cached as CatalogResponse;
     throw err;
   }

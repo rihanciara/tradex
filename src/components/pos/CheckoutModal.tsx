@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePosStore } from '@/store/posStore';
 import { submitCheckout, CheckoutPayload } from '@/lib/api';
 import { X, CreditCard, Banknote, CheckCircle, Loader2 } from 'lucide-react';
@@ -46,6 +46,14 @@ export function CheckoutModal() {
   } | null>(null);
   
   const [error, setError] = useState<string | null>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus the amount field whenever the modal opens
+  useEffect(() => {
+    if (isCheckoutOpen && !successData) {
+      setTimeout(() => amountInputRef.current?.focus(), 100);
+    }
+  }, [isCheckoutOpen, successData]);
 
   const total = cartTotal();
   const subtotal = cartSubtotal();
@@ -236,9 +244,11 @@ export function CheckoutModal() {
 
         {/* Right Side: Payment Details */}
         <div className="w-1/2 flex flex-col relative bg-white">
-          <button 
+          {/* Close button — also Escape key */}
+          <button
             onClick={() => setCheckoutOpen(false)}
             className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] transition-colors"
+            title="Close (Esc)"
           >
             <X className="w-4 h-4" />
           </button>
@@ -277,10 +287,26 @@ export function CheckoutModal() {
               <label className="block text-[13px] font-medium text-[#86868b] mb-2 px-1">Amount to Charge</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[20px] font-bold text-[#1d1d1f]">{currencySymbol}</span>
-                <input 
+                <input
+                  ref={amountInputRef}
                   type="number"
                   value={amountTendered}
                   onChange={(e) => setAmountTendered(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && isReadyToPay && !isSubmitting) {
+                      e.preventDefault();
+                      handleCheckout();
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setCheckoutOpen(false);
+                    }
+                    if (e.key === 'Tab' && !e.shiftKey) {
+                      // Tab cycles payment method
+                      e.preventDefault();
+                      setPaymentMethod(prev => prev === 'cash' ? 'card' : 'cash');
+                    }
+                  }}
                   placeholder="0.00"
                   className="w-full bg-[#f5f5f7] border-none rounded-xl py-4 pl-10 pr-4 text-[24px] font-bold text-[#1d1d1f] placeholder-[#86868b]/30 focus:ring-2 focus:ring-[#0071e3]/30 transition-all apple-input"
                   min={0}
@@ -316,14 +342,15 @@ export function CheckoutModal() {
             )}
 
             <div className="mt-auto">
-              <button 
+              <button
                 onClick={() => handleCheckout()}
                 disabled={!isReadyToPay || isSubmitting}
                 className={`w-full py-4 rounded-xl text-[17px] font-semibold shadow-sm transition-all apple-btn flex items-center justify-center ${
-                  !isReadyToPay 
-                    ? 'bg-[#f5f5f7] text-[#86868b] cursor-not-allowed' 
+                  !isReadyToPay
+                    ? 'bg-[#f5f5f7] text-[#86868b] cursor-not-allowed'
                     : 'bg-[#0071e3] hover:bg-[#0077ed] text-white'
                 }`}
+                title="Complete order (Enter)"
               >
                 {isSubmitting ? (
                   <>
