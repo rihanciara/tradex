@@ -8,6 +8,7 @@ import { CheckoutModal } from '@/components/pos/CheckoutModal';
 import { PosInitializer } from '@/components/pos/PosInitializer';
 import { OfflineSyncManager } from '@/components/pos/OfflineSyncManager';
 import { SettingsModal } from '@/components/pos/SettingsModal';
+import { RecentSalesModal } from '@/components/pos/RecentSalesModal';
 
 import { useState } from 'react';
 import { ShoppingBag, LayoutGrid } from 'lucide-react';
@@ -63,6 +64,9 @@ export default function PosPage() {
 
         {/* Settings Modal Overlay */}
         <SettingsModal />
+
+        {/* Recent Sales Modal Overlay */}
+        <RecentSalesModal />
       </main>
     </QueryClientProvider>
   );

@@ -267,3 +267,25 @@ export const createCustomer = async (payload: CreateCustomerPayload): Promise<Cr
   return response.data;
 };
 
+export interface SaleTransaction {
+  id: number;
+  invoice_no: string;
+  transaction_date: string;
+  final_total: string | number; // sometimes API returns strings for decimals
+  payment_status: string;
+  customer_name: string;
+}
+
+export interface SalesResponse {
+  success: boolean;
+  data: {
+    today_total: number;
+    sales: SaleTransaction[];
+  }
+}
+
+export const fetchRecentSales = async (): Promise<SalesResponse> => {
+  const response = await apiClient.get<SalesResponse>('/pos/sales');
+  return response.data;
+};
+

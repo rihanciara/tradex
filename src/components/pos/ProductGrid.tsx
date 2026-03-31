@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchCatalog, fetchTaxonomies } from '@/lib/api';
 import { ProductCard } from './ProductCard';
-import { Search, Filter, X, Settings } from 'lucide-react';
+import { Search, Filter, X, Settings, Receipt } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { usePosStore } from '@/store/posStore';
@@ -19,6 +19,7 @@ export function ProductGrid() {
   
   const locationId = usePosStore(state => state.initData?.location_id);
   const setSettingsOpen = usePosStore(state => state.setSettingsOpen);
+  const setRecentSalesOpen = usePosStore(state => state.setRecentSalesOpen);
   
   // React Query: Fetches catalog ONCE and caches it locally (IndexedDB prepped)
   const { data: catalogData, isLoading: catalogLoading, error: catalogError } = useQuery({

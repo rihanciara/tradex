@@ -39,6 +39,8 @@ interface PosState {
   setCheckoutOpen: (isOpen: boolean) => void;
   isSettingsOpen: boolean;
   setSettingsOpen: (isOpen: boolean) => void;
+  isRecentSalesOpen: boolean;
+  setRecentSalesOpen: (isOpen: boolean) => void;
   
   // Express Trigger
   expressCheckoutTrigger: boolean;
@@ -64,6 +66,8 @@ export const usePosStore = create<PosState>((set, get) => ({
   setCheckoutOpen: (isOpen) => set({ isCheckoutOpen: isOpen }),
   isSettingsOpen: false,
   setSettingsOpen: (isOpen) => set({ isSettingsOpen: isOpen }),
+  isRecentSalesOpen: false,
+  setRecentSalesOpen: (isOpen) => set({ isRecentSalesOpen: isOpen }),
 
   expressCheckoutTrigger: false,
   triggerExpressCash: () => set({ expressCheckoutTrigger: true, isCheckoutOpen: true }),
