@@ -9,6 +9,7 @@ import { PosInitializer } from '@/components/pos/PosInitializer';
 import { OfflineSyncManager } from '@/components/pos/OfflineSyncManager';
 import { SettingsModal } from '@/components/pos/SettingsModal';
 import { RecentSalesModal } from '@/components/pos/RecentSalesModal';
+import { RegisterModal } from '@/components/pos/RegisterModal';
 
 import { useState } from 'react';
 import { ShoppingBag, LayoutGrid } from 'lucide-react';
@@ -67,6 +68,9 @@ export default function PosPage() {
 
         {/* Recent Sales Modal Overlay */}
         <RecentSalesModal />
+
+        {/* Register Open/Close Modal Overlay */}
+        <RegisterModal />
       </main>
     </QueryClientProvider>
   );

@@ -1,13 +1,13 @@
 "use client"
 
 import { usePosStore } from '@/store/posStore';
-import { X, RefreshCw, LogOut, Terminal, User, Store, Database, ExternalLink } from 'lucide-react';
+import { X, RefreshCw, LogOut, Terminal, User, Store, Database, ExternalLink, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 
 export function SettingsModal() {
-  const { isSettingsOpen, setSettingsOpen, initData, clearCart } = usePosStore();
+  const { isSettingsOpen, setSettingsOpen, initData, clearCart, setRegisterModalOpen } = usePosStore();
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
   const router = useRouter();
@@ -146,6 +146,22 @@ export function SettingsModal() {
               <RefreshCw className={`w-5 h-5 text-[#86868b] ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
           </div>
+
+          {/* Register Management Section */}
+          {initData?.register?.is_open && (
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setRegisterModalOpen(true);
+                }}
+                className="w-full bg-[#ff9500]/10 hover:bg-[#ff9500]/20 text-[#ff9500] font-semibold py-4 rounded-2xl text-[15px] flex items-center justify-center gap-2 transition-colors apple-btn border border-[#ff9500]/20"
+              >
+                <Calculator className="w-5 h-5" />
+                Close Register Session
+              </button>
+            </div>
+          )}
 
           {/* Danger Zone */}
           <div className="pt-4 border-t border-black/5">

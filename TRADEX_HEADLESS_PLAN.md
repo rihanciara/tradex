@@ -47,8 +47,9 @@ The foundation of a headless architecture is secure, stateless communication bet
   - Fires the API immediately and opens the native browser Print dialog within 500ms.
   - Uses Zustand `expressCheckoutTrigger` → `useEffect` in `CheckoutModal` to intercept and auto-submit.
 - [x] **3.3 Offline Resilience:** Failed checkouts (no network) are queued in IndexedDB `sync_queue` and returned as `OFFLINE-XXXX` invoices for later sync.
-- [ ] **3.4 Cash Register Open/Close** (`POST /register/open`, `POST /register/close`): Deferred.
-- [ ] **3.5 Hold / Suspend Sales:** Deferred.
+- [x] **3.4 Register Management**: Implement `POST /register/open` and `POST /register/close`.
+- [x] **3.5 Hold / Suspend Sales**: Allow cashiers to "save" a cart and recall it later.
+- [ ] **3.6 Card Payment Flow**: Deep integration for card terminal metadata.
 
 ---
 
@@ -127,7 +128,7 @@ The foundation of a headless architecture is secure, stateless communication bet
 | 7 | Discount default was Percentage | ✅ Fixed — State default changed to `'fixed'`. |
 | 8 | Cannot create new customer at POS | ✅ Fixed — Inline modal + `POST /pos/customers` backend endpoint. |
 | 9 | `fwcv3` backend push | ✅ Fixed — Pushed to `origin enhanced`. |
-| 10 | Card payment flow (`POST /register` open/close) | 🔲 Not yet implemented. |
+| 10 | Card payment flow (`POST /register` open/close) | ✅ Fixed. |
 | 11 | Offline sync queue drain | ✅ Fixed — Background sync wired via OfflineSyncManager.tsx. |
 
 ---
@@ -148,7 +149,10 @@ Browser         ──GET───▶  /sso/magic-login/{id}      (web session b
 ```
 
 ## Phase 7: Sophisticated List POS Module (🚀 New Phase)
-- [ ] **7.1 Backend Pagination & Aggregation API:** Create `GET /api/v1/pos/list-pos-sales` to fetch paginated POS transactions (`is_direct_sale = 0`), joining customer names, payment statuses, location, and total paid amounts.
+- [x] Backend & Frontend: Implemented Sophisticated List POS (Paginated Sales History).
+- [x] Backend & Frontend: Implemented POS Register Management (Open/Close sessions).
+- [x] UI: Added "Hard Block" for un-opened registers and orange "Close Session" settings button.
+- [x] API: Integrated native `CashRegisterUtil` for real-time sales summaries.
 - [ ] **7.2 Robust Data Table UI:** Build a full-screen or slide-over data table (`app/pos/sales/page.tsx` or similar) in the Next.js app using a modern table library (e.g., TanStack Table).
 - [ ] **7.3 Filtering & Search Strategy:** Implement multi-parameter filtering (Date Range, Customer, Payment Status, Invoice No.).
 - [ ] **7.4 Action Quick Menu:** Add actions for each row (View Receipt, Reprint Invoice).

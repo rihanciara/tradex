@@ -317,3 +317,39 @@ export const fetchListPos = async (filters: ListPosFilters): Promise<ListPosResp
   return response.data;
 };
 
+export interface RegisterOpenPayload {
+  initial_amount: number;
+  location_id?: number | null;
+}
+
+export interface RegisterClosePayload {
+  closing_amount: number;
+  closing_note?: string;
+}
+
+export interface RegisterDetailsResponse {
+  success: boolean;
+  data: {
+    total_cash: string | number;
+    total_card: string | number;
+    total_sale: string | number;
+    cash_in_hand: string | number;
+    [key: string]: any;
+  };
+}
+
+export const openRegister = async (payload: RegisterOpenPayload): Promise<{ success: boolean; msg: string }> => {
+  const response = await apiClient.post('/register/open', payload);
+  return response.data;
+};
+
+export const closeRegister = async (payload: RegisterClosePayload): Promise<{ success: boolean; msg: string }> => {
+  const response = await apiClient.post('/register/close', payload);
+  return response.data;
+};
+
+export const fetchRegisterDetails = async (): Promise<RegisterDetailsResponse> => {
+  const response = await apiClient.get<RegisterDetailsResponse>('/register/details');
+  return response.data;
+};
+
