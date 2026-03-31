@@ -289,3 +289,31 @@ export const fetchRecentSales = async (): Promise<SalesResponse> => {
   return response.data;
 };
 
+export interface ListPosFilters {
+  location_id?: number | null;
+  limit?: number;
+  offset?: number;
+  start_date?: string;
+  end_date?: string;
+  search?: string;
+  payment_status?: string;
+  customer_id?: string | number;
+}
+
+export interface ListPosTransaction extends SaleTransaction {
+  total_paid: string | number;
+}
+
+export interface ListPosResponse {
+  success: boolean;
+  data: ListPosTransaction[];
+  total: number;
+}
+
+export const fetchListPos = async (filters: ListPosFilters): Promise<ListPosResponse> => {
+  const response = await apiClient.get<ListPosResponse>('/pos/list-pos', {
+    params: filters
+  });
+  return response.data;
+};
+

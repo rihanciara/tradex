@@ -118,17 +118,17 @@ The foundation of a headless architecture is secure, stateless communication bet
 
 | # | Item | Status |
 |---|------|--------|
-| 1 | `POST /pos/checkout` returns 403 on production | ✅ Fixed — CSRF bypass added for `/api/v1/*` in `VerifyCsrfToken.php`. Requires `git pull` on server. |
-| 2 | SSO "Invalid signature" 403 | ✅ Fixed — Replaced signed URLs with Laravel Cache token. Requires `git pull` on server. |
-| 3 | Express Cash "request failed 403" | ✅ Fixed — CSRF fix covers this. Same server pull required. |
-| 4 | Mobile tab bar clipped off screen | ✅ Fixed — Changed `h-full` to `min-h-0` on section wrappers. Live on Vercel. |
-| 5 | Cart items hidden behind footer on mobile | ✅ Fixed — Changed footer from `absolute` to `flex-none`. Live on Vercel. |
-| 6 | A-Z filter not working | ✅ Fixed — `activeLetter` state wired into useMemo filter chain. Live on Vercel. |
-| 7 | Discount default was Percentage | ✅ Fixed — State default changed to `'fixed'`. Live on Vercel. |
-| 8 | Cannot create new customer at POS | ✅ Fixed — Inline modal + `POST /pos/customers` backend endpoint. Requires server pull for backend. |
-| 9 | `fwcv3` backend push | ⚠️ **Needs manual push** — run `git push origin enhanced` in `d:\laragon\www\fwcv3`, then `git pull` on server. |
+| 1 | `POST /pos/checkout` returns 403 on production | ✅ Fixed — CSRF bypass added for `/api/v1/*` in `VerifyCsrfToken.php`. |
+| 2 | SSO "Invalid signature" 403 | ✅ Fixed — Replaced signed URLs with Laravel Cache token. |
+| 3 | Express Cash "request failed 403" | ✅ Fixed — CSRF fix covers this. |
+| 4 | Mobile tab bar clipped off screen | ✅ Fixed — Changed `h-full` to `min-h-0` on section wrappers. |
+| 5 | Cart items hidden behind footer on mobile | ✅ Fixed — Changed footer from `absolute` to `flex-none`. |
+| 6 | A-Z filter not working | ✅ Fixed — `activeLetter` state wired into useMemo filter chain. |
+| 7 | Discount default was Percentage | ✅ Fixed — State default changed to `'fixed'`. |
+| 8 | Cannot create new customer at POS | ✅ Fixed — Inline modal + `POST /pos/customers` backend endpoint. |
+| 9 | `fwcv3` backend push | ✅ Fixed — Pushed to `origin enhanced`. |
 | 10 | Card payment flow (`POST /register` open/close) | 🔲 Not yet implemented. |
-| 11 | Offline sync queue drain | 🔲 Background sync worker not yet wired. |
+| 11 | Offline sync queue drain | ✅ Fixed — Background sync wired via OfflineSyncManager.tsx. |
 
 ---
 
@@ -147,7 +147,19 @@ SettingsModal   ──GET───▶  /api/v1/auth/sso-url       (Cache token)
 Browser         ──GET───▶  /sso/magic-login/{id}      (web session bridge)
 ```
 
+## Phase 7: Sophisticated List POS Module (🚀 New Phase)
+- [ ] **7.1 Backend Pagination & Aggregation API:** Create `GET /api/v1/pos/list-pos-sales` to fetch paginated POS transactions (`is_direct_sale = 0`), joining customer names, payment statuses, location, and total paid amounts.
+- [ ] **7.2 Robust Data Table UI:** Build a full-screen or slide-over data table (`app/pos/sales/page.tsx` or similar) in the Next.js app using a modern table library (e.g., TanStack Table).
+- [ ] **7.3 Filtering & Search Strategy:** Implement multi-parameter filtering (Date Range, Customer, Payment Status, Invoice No.).
+- [ ] **7.4 Action Quick Menu:** Add actions for each row (View Receipt, Reprint Invoice).
+
+---
+
 ## Recent Accomplishments (Latest Pull)
+- **Inline Cart Editing:** Replaced cumbersome discount modals with sleek, Apple-style inline editing fields for per-item custom prices and cart-level fixed discounts without disrupting the layout.
+- **Offline Sync Infrastructure:** Wired the `OfflineSyncManager` to automatically listen for window `online` events and flush the IndexedDB `sync_queue` in the background seamlessly.
+- **Recent Sales Data:** Built the backend `getRecentSales` API endpoint in the `JerryUpdates` module to supply today's sales data to the frontend modal, resolving a missing endpoint limitation.
+- **Backend Source Control:** Successfully pushed the Laravel backend changes to the `enhanced` branch, resolving merge conflicts in the headless API routing.
 - **Settings Modal & Security:** Implemented a secure logout flow that destroys the `auth_token` cookie, clears the Zustand cart state, and purges the `tradex_pos_db` IndexedDB.
 - **Manual Sync:** Added a "Force Resync" button to the Settings Modal allowing cashiers to manually purge their offline database and fetch the freshest prices.
 - **Card & Partial Payments:** Unified the payment input in `CheckoutModal.tsx`, allowing exact amounts for both Cash and Card. Added safety guardrails against overcharging cards, and visual alerts for partial payments ("Remaining balance will be marked as Due").

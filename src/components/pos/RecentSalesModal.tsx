@@ -59,7 +59,18 @@ export function RecentSalesModal() {
               <h2 className="text-[20px] font-bold text-[#1d1d1f] tracking-tight leading-tight">
                 Recent Sales
               </h2>
-              <p className="text-[13px] text-[#86868b] font-medium">View and edit your latest transactions</p>
+              <div className="flex items-center gap-4 mt-1">
+                <p className="text-[13px] text-[#86868b] font-medium">View and edit your latest transactions</p>
+                <button 
+                  onClick={() => {
+                    setRecentSalesOpen(false);
+                    window.location.href = '/pos/sales';
+                  }}
+                  className="text-[12px] font-bold text-[#0071e3] hover:underline flex items-center gap-1"
+                >
+                  View Full History <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
           <button 
