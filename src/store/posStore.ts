@@ -5,6 +5,7 @@ interface CartItem extends Product {
   cart_id: string; // Unique ID for the cart (in case of combo splits)
   quantity: number;
   final_price: number; // Includes item-level taxes
+  item_discount: number; // Per-line fixed discount amount
 }
 
 interface PosState {
@@ -16,6 +17,8 @@ interface PosState {
   addToCart: (product: Product) => void;
   removeFromCart: (cartId: string) => void;
   updateQuantity: (cartId: string, qty: number) => void;
+  updateItemPrice: (cartId: string, price: number) => void;
+  updateItemDiscount: (cartId: string, discount: number) => void;
   clearCart: () => void;
   
   // Cart Level Discount & Tax
@@ -97,6 +100,7 @@ export const usePosStore = create<PosState>((set, get) => ({
             cart_id: Math.random().toString(36).substr(2, 9),
             quantity: 1,
             final_price: product.sell_price_inc_tax,
+            item_discount: 0,
           },
         ],
       };
@@ -114,6 +118,27 @@ export const usePosStore = create<PosState>((set, get) => ({
       cart: state.cart.map((item) =>
         item.cart_id === cartId ? { ...item, quantity: qty } : item
       ),
+    }));
+  },
+
+  updateItemPrice: (cartId, price) => {
+    set((state) => ({
+      cart: state.cart.map((item) =>
+        item.cart_id === cartId
+          ? { ...item, final_price: Math.max(0, price) }
+          : item
+      ),
+    }));
+  },
+
+  updateItemDiscount: (cartId, discount) => {
+    set((state) => ({
+      cart: state.cart.map((item) => {
+        if (item.cart_id !== cartId) return item;
+        const base = item.sell_price_inc_tax;
+        const discounted = Math.max(0, base - Math.max(0, discount));
+        return { ...item, item_discount: Math.max(0, discount), final_price: discounted };
+      }),
     }));
   },
 
